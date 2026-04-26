@@ -172,8 +172,8 @@ export async function fetchNearbyPois(
 
   let pois: Poi[] = [];
   try {
-    const { fetchNearbyPoisOsm } = await import('./placesOsm');
-    pois = await fetchNearbyPoisOsm(
+    // Prefer server-side proxy on web/mobile browsers: avoids CORS/rate-limit issues seen client-side.
+    pois = await fetchNearbyPoisViaCloudflareProxy(
       latitude,
       longitude,
       categoryKey,
@@ -181,8 +181,9 @@ export async function fetchNearbyPois(
       preferredLanguage,
       radiusMeters
     );
-    if (pois.length === 0 && searchTerm.trim()) {
-      pois = await fetchNearbyPoisViaCloudflareProxy(
+    if (pois.length === 0) {
+      const { fetchNearbyPoisOsm } = await import('./placesOsm');
+      pois = await fetchNearbyPoisOsm(
         latitude,
         longitude,
         categoryKey,
@@ -192,9 +193,10 @@ export async function fetchNearbyPois(
       );
     }
   } catch {
-    // On web, Overpass can be blocked by CORS; fallback to Cloudflare Pages Function proxy.
+    // Last client-side attempt before synthetic fallback.
     try {
-      pois = await fetchNearbyPoisViaCloudflareProxy(
+      const { fetchNearbyPoisOsm } = await import('./placesOsm');
+      pois = await fetchNearbyPoisOsm(
         latitude,
         longitude,
         categoryKey,

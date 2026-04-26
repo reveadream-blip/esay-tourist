@@ -162,6 +162,18 @@ async function fetchNominatimFallback(lat, lng, radius, query, preferredLanguage
   return (data || []).map(toPoiFromNominatim).filter(Boolean);
 }
 
+function dedupePois(list) {
+  const seen = new Set();
+  const out = [];
+  for (const p of list) {
+    const key = `${Number(p.latitude).toFixed(5)}_${Number(p.longitude).toFixed(5)}_${String(p.name || '').toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
   const lat = Number(url.searchParams.get('lat'));
@@ -195,9 +207,10 @@ ${overpassQueryForCategory(category, lat, lng, radius, query)}`;
   let list = (data.elements || [])
     .map((el) => toPoi(el, preferredLanguage))
     .filter(Boolean)
-    .slice(0, 300);
-  if (list.length === 0 && query.trim()) {
-    list = await fetchNominatimFallback(lat, lng, radius, query, preferredLanguage);
+    .slice(0, 250);
+  if (query.trim()) {
+    const nameMatches = await fetchNominatimFallback(lat, lng, radius, query, preferredLanguage);
+    list = dedupePois([...nameMatches, ...list]).slice(0, 300);
   }
   return json({ pois: list, source: 'osm-proxy' });
 }
