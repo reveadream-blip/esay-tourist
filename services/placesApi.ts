@@ -37,6 +37,26 @@ export function hasPlacesApiKey(): boolean {
 /** Source utilisée côté UI (affichage discret). */
 export type PoiDataSource = 'google' | 'osm';
 
+async function fetchNearbyPoisViaCloudflareProxy(
+  latitude: number,
+  longitude: number,
+  categoryKey: string,
+  radiusMeters: number
+): Promise<Poi[]> {
+  const params = new URLSearchParams({
+    lat: String(latitude),
+    lng: String(longitude),
+    category: categoryKey,
+    radius: String(radiusMeters),
+  });
+  const res = await fetch(`/api/pois?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error(`Proxy HTTP ${res.status}`);
+  }
+  const json = (await res.json()) as { pois?: Poi[] };
+  return json.pois ?? [];
+}
+
 async function fetchNearbyPoisGoogle(
   latitude: number,
   longitude: number,
@@ -98,12 +118,18 @@ export async function fetchNearbyPois(
     return { pois, source: 'google' };
   }
 
-  const { fetchNearbyPoisOsm } = await import('./placesOsm');
-  const pois = await fetchNearbyPoisOsm(
-    latitude,
-    longitude,
-    categoryKey,
-    radiusMeters
-  );
+  let pois: Poi[] = [];
+  try {
+    const { fetchNearbyPoisOsm } = await import('./placesOsm');
+    pois = await fetchNearbyPoisOsm(latitude, longitude, categoryKey, radiusMeters);
+  } catch {
+    // On web, Overpass can be blocked by CORS; fallback to Cloudflare Pages Function proxy.
+    pois = await fetchNearbyPoisViaCloudflareProxy(
+      latitude,
+      longitude,
+      categoryKey,
+      radiusMeters
+    );
+  }
   return { pois, source: 'osm' };
 }
