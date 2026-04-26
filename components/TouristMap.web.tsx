@@ -24,17 +24,20 @@ export function TouristMap({ pois, selectedPoiId, onSelectPoi }: TouristMapProps
       <ScrollView contentContainerStyle={styles.list}>
         {pois.map((poi) => {
           const selected = poi.id === selectedPoiId;
+          const distanceLabel = formatDistanceMeters(poi.distanceMeters);
           return (
             <Pressable
               key={poi.id}
               onPress={() => onSelectPoi(poi)}
               style={[styles.item, selected && styles.itemSelected]}
             >
-              <Text style={styles.itemTitle}>{poi.name}</Text>
+              <View style={styles.itemTopRow}>
+                <Text style={styles.itemTitle} numberOfLines={1}>
+                  {poi.name}
+                </Text>
+                {distanceLabel ? <Text style={styles.itemDistance}>{distanceLabel}</Text> : null}
+              </View>
               {poi.address ? <Text style={styles.itemSub}>{poi.address}</Text> : null}
-              {formatDistanceMeters(poi.distanceMeters) ? (
-                <Text style={styles.itemDistance}>{formatDistanceMeters(poi.distanceMeters)}</Text>
-              ) : null}
             </Pressable>
           );
         })}
@@ -64,7 +67,13 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   itemSelected: { borderColor: '#06b6d4', backgroundColor: '#083344' },
+  itemTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   itemTitle: { color: '#f8fafc', fontWeight: '700' },
-  itemSub: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
-  itemDistance: { color: '#67e8f9', fontSize: 12, marginTop: 6, fontWeight: '700' },
+  itemSub: { color: '#94a3b8', fontSize: 12, marginTop: 4 },
+  itemDistance: { color: '#67e8f9', fontSize: 12, fontWeight: '700' },
 });

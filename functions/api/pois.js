@@ -79,12 +79,30 @@ out center 80;`;
   }
 }
 
-function toPoi(el) {
+function normalizeLanguageTag(languageTag) {
+  const value = String(languageTag || '').trim().toLowerCase();
+  if (!value) return 'en';
+  return value.split('-')[0] || 'en';
+}
+
+function pickLocalizedName(tags, preferredLanguage) {
+  const lang = normalizeLanguageTag(preferredLanguage);
+  const direct = tags[`name:${lang}`];
+  const chain = [direct, tags['name:en'], tags.int_name, tags.official_name, tags.name, tags.brand, tags.operator];
+  for (const candidate of chain) {
+    if (candidate && String(candidate).trim()) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function toPoi(el, preferredLanguage) {
   const lat = el.lat ?? el.center?.lat;
   const lon = el.lon ?? el.center?.lon;
   if (lat == null || lon == null) return null;
   const t = el.tags || {};
-  const name = t.name || t.brand || t['name:en'] || t['name:fr'] || t.operator;
+  const name = pickLocalizedName(t, preferredLanguage);
   if (!name) return null;
   const addr = [t['addr:street'], t['addr:housenumber'], t['addr:city']]
     .filter(Boolean)
@@ -104,6 +122,7 @@ export async function onRequestGet(context) {
   const lng = Number(url.searchParams.get('lng'));
   const category = url.searchParams.get('category') || 'all';
   const query = url.searchParams.get('q') || '';
+  const preferredLanguage = url.searchParams.get('lang') || 'en';
   const radius = Number(url.searchParams.get('radius') || '50000');
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -127,6 +146,9 @@ ${overpassQueryForCategory(category, lat, lng, radius, query)}`;
   }
 
   const data = await res.json();
-  const list = (data.elements || []).map(toPoi).filter(Boolean).slice(0, 300);
+  const list = (data.elements || [])
+    .map((el) => toPoi(el, preferredLanguage))
+    .filter(Boolean)
+    .slice(0, 300);
   return json({ pois: list, source: 'osm-proxy' });
 }

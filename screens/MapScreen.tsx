@@ -49,7 +49,7 @@ function formatDistanceMeters(meters: number): string {
 }
 
 export function MapScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -63,7 +63,13 @@ export function MapScreen() {
   const [dataSource, setDataSource] = useState<PoiDataSource | null>(null);
 
   const loadPois = useCallback(
-    async (lat: number, lng: number, cat: string, query: string) => {
+    async (
+      lat: number,
+      lng: number,
+      cat: string,
+      query: string,
+      preferredLanguage: string
+    ) => {
       setApiMessage(null);
       setLoadingPois(true);
       try {
@@ -72,6 +78,7 @@ export function MapScreen() {
           lng,
           cat,
           query,
+          preferredLanguage,
           SEARCH_RADIUS_METERS
         );
         const poisWithDistance = pois
@@ -139,10 +146,10 @@ export function MapScreen() {
       return;
     }
     const timer = setTimeout(() => {
-      loadPois(userCoords.lat, userCoords.lng, category, search);
+      loadPois(userCoords.lat, userCoords.lng, category, search, i18n.resolvedLanguage || i18n.language);
     }, 350);
     return () => clearTimeout(timer);
-  }, [userCoords, category, search, loadPois]);
+  }, [userCoords, category, search, i18n.language, i18n.resolvedLanguage, loadPois]);
 
   const onDirections = async () => {
     if (!selectedPoi) {
@@ -258,7 +265,16 @@ export function MapScreen() {
         <View style={styles.toolbar}>
           {loadingPois ? <ActivityIndicator /> : null}
           <Pressable
-            onPress={() => userCoords && loadPois(userCoords.lat, userCoords.lng, category, search)}
+            onPress={() =>
+              userCoords &&
+              loadPois(
+                userCoords.lat,
+                userCoords.lng,
+                category,
+                search,
+                i18n.resolvedLanguage || i18n.language
+              )
+            }
             style={styles.refreshBtn}
           >
             <Text style={styles.refreshText}>{t('refresh')}</Text>

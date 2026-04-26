@@ -40,6 +40,14 @@ function buildKeywordPattern(searchTerm: string): string {
   return synonyms[q] ?? escapeRegex(q);
 }
 
+function normalizeLanguageTag(languageTag: string): string {
+  const code = languageTag.trim().toLowerCase();
+  if (!code) {
+    return 'en';
+  }
+  return code.split('-')[0] || 'en';
+}
+
 function overpassQueryForCategory(
   categoryKey: string,
   lat: number,
@@ -94,14 +102,34 @@ out center 80;`;
   }
 }
 
-function elementToPoi(el: OsmElement): Poi | null {
+function pickLocalizedName(tags: Record<string, string>, preferredLanguage: string): string | null {
+  const lang = normalizeLanguageTag(preferredLanguage);
+  const direct = tags[`name:${lang}`];
+  const fallbackChain = [
+    direct,
+    tags['name:en'],
+    tags['int_name'],
+    tags['official_name'],
+    tags['name'],
+    tags['brand'],
+    tags['operator'],
+  ];
+  for (const candidate of fallbackChain) {
+    if (candidate && candidate.trim()) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function elementToPoi(el: OsmElement, preferredLanguage: string): Poi | null {
   const lat = el.lat ?? el.center?.lat;
   const lon = el.lon ?? el.center?.lon;
   if (lat == null || lon == null) {
     return null;
   }
   const t = el.tags ?? {};
-  const name = t.name ?? t.brand ?? t['name:en'] ?? t['name:fr'] ?? t.operator;
+  const name = pickLocalizedName(t, preferredLanguage);
   if (!name) {
     return null;
   }
@@ -127,6 +155,7 @@ export async function fetchNearbyPoisOsm(
   longitude: number,
   categoryKey: string,
   searchTerm = '',
+  preferredLanguage = 'en',
   radiusMeters = 50000
 ): Promise<Poi[]> {
   const body = `[out:json][timeout:25];
@@ -147,7 +176,7 @@ ${overpassQueryForCategory(categoryKey, latitude, longitude, radiusMeters, searc
 
   const json = (await res.json()) as { elements?: OsmElement[] };
   const list = (json.elements ?? [])
-    .map((el) => elementToPoi(el))
+    .map((el) => elementToPoi(el, preferredLanguage))
     .filter((p): p is Poi => p != null);
 
   const seen = new Set<string>();

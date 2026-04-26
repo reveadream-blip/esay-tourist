@@ -38,11 +38,20 @@ export function hasPlacesApiKey(): boolean {
 /** Source utilisée côté UI (affichage discret). */
 export type PoiDataSource = 'google' | 'osm' | 'fallback';
 
+function normalizeLanguageTag(languageTag: string): string {
+  const code = languageTag.trim().toLowerCase();
+  if (!code) {
+    return 'en';
+  }
+  return code.split('-')[0] || 'en';
+}
+
 async function fetchNearbyPoisViaCloudflareProxy(
   latitude: number,
   longitude: number,
   categoryKey: string,
   searchTerm: string,
+  preferredLanguage: string,
   radiusMeters: number
 ): Promise<Poi[]> {
   const params = new URLSearchParams({
@@ -50,6 +59,7 @@ async function fetchNearbyPoisViaCloudflareProxy(
     lng: String(longitude),
     category: categoryKey,
     q: searchTerm,
+    lang: normalizeLanguageTag(preferredLanguage),
     radius: String(radiusMeters),
   });
   const res = await fetch(`/api/pois?${params.toString()}`);
@@ -96,6 +106,7 @@ async function fetchNearbyPoisGoogle(
   longitude: number,
   categoryKey: string,
   searchTerm: string,
+  preferredLanguage: string,
   radiusMeters: number
 ): Promise<Poi[]> {
   const key = getApiKey();
@@ -109,6 +120,7 @@ async function fetchNearbyPoisGoogle(
     radius: String(radiusMeters),
     type,
     ...(searchTerm.trim() ? { keyword: searchTerm.trim() } : {}),
+    language: normalizeLanguageTag(preferredLanguage),
     key,
   });
 
@@ -143,6 +155,7 @@ export async function fetchNearbyPois(
   longitude: number,
   categoryKey: string,
   searchTerm = '',
+  preferredLanguage = 'en',
   radiusMeters = 50000
 ): Promise<{ pois: Poi[]; source: PoiDataSource }> {
   if (getApiKey()) {
@@ -151,6 +164,7 @@ export async function fetchNearbyPois(
       longitude,
       categoryKey,
       searchTerm,
+      preferredLanguage,
       radiusMeters
     );
     return { pois, source: 'google' };
@@ -164,6 +178,7 @@ export async function fetchNearbyPois(
       longitude,
       categoryKey,
       searchTerm,
+      preferredLanguage,
       radiusMeters
     );
   } catch {
@@ -174,6 +189,7 @@ export async function fetchNearbyPois(
         longitude,
         categoryKey,
         searchTerm,
+        preferredLanguage,
         radiusMeters
       );
     } catch {
