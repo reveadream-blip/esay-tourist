@@ -63,30 +63,34 @@ out center 80;`;
 
   switch (categoryKey) {
     case 'restaurant':
-      return a(`  nwr[amenity=restaurant](around:${r},${lat},${lon});${keywordFilters}`);
+      return a(`  nwr[amenity=restaurant](around:${r},${lat},${lon});
+  nwr[amenity=cafe](around:${r},${lat},${lon});
+  nwr[amenity=fast_food](around:${r},${lat},${lon});
+  nwr[amenity=bar](around:${r},${lat},${lon});${keywordFilters}`);
     case 'hotel':
       return a(`  nwr[tourism=hotel](around:${r},${lat},${lon});
   nwr[amenity=hotel](around:${r},${lat},${lon});${keywordFilters}`);
     case 'shop':
-      return a(`  nwr[shop=mall](around:${r},${lat},${lon});
-  nwr[shop=department_store](around:${r},${lat},${lon});
-  nwr[shop=clothes](around:${r},${lat},${lon});${keywordFilters}`);
+      return a(`  nwr[shop](around:${r},${lat},${lon});${keywordFilters}`);
     case 'travel':
       return a(`  nwr[office=travel_agent](around:${r},${lat},${lon});
-  nwr[tourism=information](around:${r},${lat},${lon});${keywordFilters}`);
+  nwr[tourism=information](around:${r},${lat},${lon});
+  nwr[tourism=attraction](around:${r},${lat},${lon});
+  nwr[tourism=museum](around:${r},${lat},${lon});${keywordFilters}`);
     case 'grocery':
       return a(`  nwr[shop=supermarket](around:${r},${lat},${lon});
   nwr[shop=convenience](around:${r},${lat},${lon});
-  nwr[shop=grocery](around:${r},${lat},${lon});${keywordFilters}`);
+  nwr[shop=grocery](around:${r},${lat},${lon});
+  nwr[shop=greengrocer](around:${r},${lat},${lon});${keywordFilters}`);
     case 'bakery':
       return a(`  nwr[shop=bakery](around:${r},${lat},${lon});${keywordFilters}`);
     case 'all':
     default:
-      return a(`  nwr[amenity=restaurant](around:${r},${lat},${lon});
-  nwr[tourism=hotel](around:${r},${lat},${lon});
-  nwr[shop=supermarket](around:${r},${lat},${lon});
-  nwr[shop=bakery](around:${r},${lat},${lon});
-  nwr[office=travel_agent](around:${r},${lat},${lon});${keywordFilters}`);
+      return a(`  nwr[shop](around:${r},${lat},${lon});
+  nwr[amenity~"restaurant|cafe|fast_food|bar|pharmacy|bank|atm|clinic|hospital|dentist|fuel",i](around:${r},${lat},${lon});
+  nwr[tourism~"hotel|guest_house|hostel|attraction|museum|information",i](around:${r},${lat},${lon});
+  nwr[office=travel_agent](around:${r},${lat},${lon});
+  nwr[leisure](around:${r},${lat},${lon});${keywordFilters}`);
   }
 }
 

@@ -42,20 +42,42 @@ async function fetchProxyPois(
   preferredLanguage: string,
   radiusMeters: number
 ): Promise<Poi[]> {
-  const params = new URLSearchParams({
-    lat: String(latitude),
-    lng: String(longitude),
-    category: categoryKey,
-    q: searchTerm,
-    lang: normalizeLanguageTag(preferredLanguage),
-    radius: String(radiusMeters),
-  });
-  const res = await fetchWithTimeout(`/api/pois?${params.toString()}`);
-  if (!res.ok) {
-    return [];
+  const requestOnce = async (radius: number): Promise<Poi[]> => {
+    const params = new URLSearchParams({
+      lat: String(latitude),
+      lng: String(longitude),
+      category: categoryKey,
+      q: searchTerm,
+      lang: normalizeLanguageTag(preferredLanguage),
+      radius: String(radius),
+    });
+    const res = await fetchWithTimeout(`/api/pois?${params.toString()}`);
+    if (!res.ok) {
+      return [];
+    }
+    const json = (await res.json()) as { pois?: Poi[] };
+    return json.pois ?? [];
+  };
+
+  // For "around me" tabs, query progressively to prioritize nearest places.
+  if (!searchTerm.trim()) {
+    const steps = [2000, 5000, 10000, 20000, radiusMeters];
+    const merged: Poi[] = [];
+    const seen = new Set<string>();
+    for (const step of steps) {
+      const chunk = await requestOnce(Math.min(step, radiusMeters));
+      for (const poi of chunk) {
+        const key = `${poi.latitude.toFixed(5)}_${poi.longitude.toFixed(5)}_${poi.name.toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(poi);
+      }
+      if (merged.length >= 250) break;
+    }
+    return merged.slice(0, 300);
   }
-  const json = (await res.json()) as { pois?: Poi[] };
-  return json.pois ?? [];
+
+  return requestOnce(radiusMeters);
 }
 
 function normalizeLanguageTag(languageTag: string): string {
