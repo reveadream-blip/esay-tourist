@@ -1,5 +1,6 @@
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
+const UPSTREAM_TIMEOUT_MS = 12000;
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -12,13 +13,23 @@ function json(data, status = 200) {
   });
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = UPSTREAM_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function overpassQueryForCategory(categoryKey, lat, lon, radius, searchTerm) {
   const r = Math.min(Math.max(Number(radius) || 50000, 200), 50000);
   function escapeRegex(input) {
     return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
-  function buildKeywordPattern(searchTerm) {
-    const q = String(searchTerm || '').trim().toLowerCase();
+  function buildKeywordPattern(qValue) {
+    const q = String(qValue || '').trim().toLowerCase();
     if (!q) return '';
     const synonyms = {
       spa: 'spa|wellness|massage',
@@ -28,7 +39,6 @@ function overpassQueryForCategory(categoryKey, lat, lon, radius, searchTerm) {
       motobike: 'motorcycle|motorbike|scooter|bike_rental',
       moto: 'motorcycle|motorbike|scooter|bike_rental',
       voiture: 'car|car_rental|rental',
-      plongée: 'diving|dive|scuba',
       plongee: 'diving|dive|scuba',
       visite: 'attraction|museum|gallery|viewpoint|tourism',
       monument: 'monument|memorial|historic|castle|fort',
@@ -91,9 +101,7 @@ function pickLocalizedName(tags, preferredLanguage) {
   const direct = tags[`name:${lang}`];
   const chain = [direct, tags['name:en'], tags.int_name, tags.official_name, tags.name, tags.brand, tags.operator];
   for (const candidate of chain) {
-    if (candidate && String(candidate).trim()) {
-      return candidate;
-    }
+    if (candidate && String(candidate).trim()) return candidate;
   }
   return null;
 }
@@ -105,9 +113,7 @@ function toPoi(el, preferredLanguage) {
   const t = el.tags || {};
   const name = pickLocalizedName(t, preferredLanguage);
   if (!name) return null;
-  const addr = [t['addr:street'], t['addr:housenumber'], t['addr:city']]
-    .filter(Boolean)
-    .join(' ');
+  const addr = [t['addr:street'], t['addr:housenumber'], t['addr:city']].filter(Boolean).join(' ');
   return {
     id: `osm-${el.type}-${el.id}`,
     name,
@@ -142,7 +148,6 @@ async function fetchNominatimFallback(lat, lng, radius, query, preferredLanguage
   const right = lng + lonDelta;
   const top = lat + latDelta;
   const bottom = lat - latDelta;
-
   const params = new URLSearchParams({
     format: 'jsonv2',
     q,
@@ -152,14 +157,16 @@ async function fetchNominatimFallback(lat, lng, radius, query, preferredLanguage
     'accept-language': preferredLanguage || 'en',
   });
 
-  const res = await fetch(`${NOMINATIM}?${params.toString()}`, {
-    headers: {
-      'User-Agent': 'EasyTourist/1.0 (Cloudflare Pages Function)',
-    },
-  });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return (data || []).map(toPoiFromNominatim).filter(Boolean);
+  try {
+    const res = await fetchWithTimeout(`${NOMINATIM}?${params.toString()}`, {
+      headers: { 'User-Agent': 'EasyTourist/1.0 (Cloudflare Pages Function)' },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data || []).map(toPoiFromNominatim).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 function dedupePois(list) {
@@ -190,24 +197,27 @@ export async function onRequestGet(context) {
   const body = `[out:json][timeout:25];
 ${overpassQueryForCategory(category, lat, lng, radius, query)}`;
 
-  const res = await fetch(OVERPASS, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'User-Agent': 'EasyTourist/1.0 (Cloudflare Pages Function)',
-    },
-    body,
-  });
-
-  if (!res.ok) {
-    return json({ error: `Overpass HTTP ${res.status}` }, 502);
+  let list = [];
+  try {
+    const res = await fetchWithTimeout(OVERPASS, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'User-Agent': 'EasyTourist/1.0 (Cloudflare Pages Function)',
+      },
+      body,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      list = (data.elements || [])
+        .map((el) => toPoi(el, preferredLanguage))
+        .filter(Boolean)
+        .slice(0, 250);
+    }
+  } catch {
+    // Ignore and continue with Nominatim fallback.
   }
 
-  const data = await res.json();
-  let list = (data.elements || [])
-    .map((el) => toPoi(el, preferredLanguage))
-    .filter(Boolean)
-    .slice(0, 250);
   if (query.trim()) {
     const nameMatches = await fetchNominatimFallback(lat, lng, radius, query, preferredLanguage);
     list = dedupePois([...nameMatches, ...list]).slice(0, 300);

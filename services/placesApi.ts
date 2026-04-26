@@ -26,6 +26,7 @@ export const categoryToPlaceType: Record<string, string> = {
 };
 
 const NEARBY_URL = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json';
+const CLIENT_FETCH_TIMEOUT_MS = 12000;
 
 function getApiKey(): string {
   return process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
@@ -37,6 +38,16 @@ export function hasPlacesApiKey(): boolean {
 
 /** Source utilisée côté UI (affichage discret). */
 export type PoiDataSource = 'google' | 'osm' | 'fallback';
+
+async function fetchWithTimeout(url: string, timeoutMs = CLIENT_FETCH_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function normalizeLanguageTag(languageTag: string): string {
   const code = languageTag.trim().toLowerCase();
@@ -62,7 +73,7 @@ async function fetchNearbyPoisViaCloudflareProxy(
     lang: normalizeLanguageTag(preferredLanguage),
     radius: String(radiusMeters),
   });
-  const res = await fetch(`/api/pois?${params.toString()}`);
+  const res = await fetchWithTimeout(`/api/pois?${params.toString()}`);
   if (!res.ok) {
     throw new Error(`Proxy HTTP ${res.status}`);
   }
@@ -124,7 +135,7 @@ async function fetchNearbyPoisGoogle(
     key,
   });
 
-  const res = await fetch(`${NEARBY_URL}?${params.toString()}`);
+  const res = await fetchWithTimeout(`${NEARBY_URL}?${params.toString()}`);
   const json = (await res.json()) as {
     results?: GooglePlaceResult[];
     status: string;
