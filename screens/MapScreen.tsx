@@ -58,12 +58,14 @@ export function MapScreen() {
   const [rawPois, setRawPois] = useState<Poi[]>([]);
   const [search, setSearch] = useState('');
   const [selectedPoi, setSelectedPoi] = useState<Poi | null>(null);
-  const [loadingLocation, setLoadingLocation] = useState(true);
+  const [loadingLocation, setLoadingLocation] = useState(false);
   const [loadingPois, setLoadingPois] = useState(false);
   const [apiMessage, setApiMessage] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<PoiDataSource | null>(null);
+  const [hasRequestedOnce, setHasRequestedOnce] = useState(false);
 
   const requestUserLocation = useCallback(async () => {
+    setHasRequestedOnce(true);
     setLoadingLocation(true);
     setLocationError(null);
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -129,9 +131,16 @@ export function MapScreen() {
     []
   );
 
-  useEffect(() => {
-    requestUserLocation();
-  }, [requestUserLocation]);
+  if (!hasRequestedOnce && !loadingLocation && !userCoords) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.message}>{t('locationPrompt')}</Text>
+        <Pressable onPress={requestUserLocation} style={styles.permissionBtn}>
+          <Text style={styles.permissionBtnText}>{t('enableLocation')}</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   useEffect(() => {
     if (!userCoords) {

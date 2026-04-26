@@ -27,5 +27,6 @@
                    },
     "enableLocation":  "Activar mi ubicación",
     "openSettings":  "Abrir ajustes",
-    "retry":  "Reintentar"
+    "retry":  "Reintentar",
+    "locationPrompt":  "Permite la ubicación para mostrar lugares a tu alrededor."
 }

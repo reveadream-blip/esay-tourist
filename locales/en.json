@@ -27,5 +27,6 @@
                    },
     "enableLocation":  "Enable my location",
     "openSettings":  "Open settings",
-    "retry":  "Try again"
+    "retry":  "Try again",
+    "locationPrompt":  "Allow location access to show places around you."
 }
