@@ -13,6 +13,7 @@ import { PlaceCard, type Place } from './components/PlaceCard'
 const EARTH_RADIUS_KM = 6371
 const MAX_RADIUS_METERS = 50000
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
+const OVERPASS_RESULT_LIMIT = 20000
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
@@ -103,22 +104,30 @@ const getStableRating = (rawId: string): number => {
   return 3.8 + (seed % 12) / 10
 }
 
-const buildOverpassQuery = (lat: number, lng: number): string => `
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const buildOverpassQuery = (lat: number, lng: number, searchTerm = ''): string => {
+  const normalizedSearch = searchTerm.trim()
+  const nameFilter = normalizedSearch ? `["name"~"${escapeRegex(normalizedSearch)}",i]` : ''
+
+  return `
 [out:json][timeout:40];
 (
-  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[amenity~"restaurant|cafe|fast_food|food_court|bar|pub|biergarten|nightclub|spa|marketplace|travel_agency|car_rental|bicycle_rental|motorcycle_rental|vehicle_rental|boat_rental"];
-  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[tourism~"hotel|motel|hostel|guest_house|apartment|attraction|museum|artwork|viewpoint|theme_park|zoo|aquarium|gallery"];
-  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[historic~"monument|memorial|ruins|castle|archaeological_site"];
-  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[leisure~"park|playground|sports_centre|fitness_centre|water_park|marina|spa"];
-  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[shop~"mall|car_rental|massage"];
+  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[amenity~"restaurant|cafe|fast_food|food_court|bar|pub|biergarten|nightclub|spa|marketplace|travel_agency|car_rental|bicycle_rental|motorcycle_rental|vehicle_rental|boat_rental"]${nameFilter};
+  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[tourism~"hotel|motel|hostel|guest_house|apartment|attraction|museum|artwork|viewpoint|theme_park|zoo|aquarium|gallery"]${nameFilter};
+  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[historic~"monument|memorial|ruins|castle|archaeological_site"]${nameFilter};
+  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[leisure~"park|playground|sports_centre|fitness_centre|water_park|marina|spa"]${nameFilter};
+  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[shop~"mall|car_rental|massage"]${nameFilter};
 );
-out center 1000;
+out center ${OVERPASS_RESULT_LIMIT};
 `
+}
 
 function App() {
   const { t } = useTranslation()
   const [category, setCategory] = useState<CategoryId>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null)
   const [places, setPlaces] = useState<Place[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -145,6 +154,11 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(searchQuery), 350)
+    return () => window.clearTimeout(timer)
+  }, [searchQuery])
+
+  useEffect(() => {
     if (!position) return
 
     const controller = new AbortController()
@@ -153,7 +167,7 @@ function App() {
       try {
         const response = await fetch(OVERPASS_URL, {
           method: 'POST',
-          body: buildOverpassQuery(position.lat, position.lng),
+          body: buildOverpassQuery(position.lat, position.lng, debouncedSearch),
           signal: controller.signal,
         })
 
@@ -192,7 +206,7 @@ function App() {
             })
             return acc
           }, [])
-          .filter((place, index, array) => array.findIndex((item) => item.name === place.name) === index)
+          .filter((place, index, array) => array.findIndex((item) => item.id === place.id) === index)
 
         setPlaces(parsedPlaces)
       } catch (error) {
@@ -208,7 +222,7 @@ function App() {
 
     void loadNearbyPlaces()
     return () => controller.abort()
-  }, [position])
+  }, [position, debouncedSearch])
 
   const filteredPlaces = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
