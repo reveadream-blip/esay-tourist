@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -63,6 +63,7 @@ export function MapScreen() {
   const [apiMessage, setApiMessage] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<PoiDataSource | null>(null);
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
+  const loadRequestSeq = useRef(0);
 
   const loadPois = useCallback(
     async (
@@ -72,6 +73,7 @@ export function MapScreen() {
       query: string,
       preferredLanguage: string
     ) => {
+      const requestId = ++loadRequestSeq.current;
       setApiMessage(null);
       setLoadingPois(true);
       try {
@@ -89,6 +91,12 @@ export function MapScreen() {
             distanceMeters: getDistanceMeters(lat, lng, poi.latitude, poi.longitude),
           }))
           .sort((a, b) => (a.distanceMeters ?? 0) - (b.distanceMeters ?? 0));
+
+        // Ignore stale responses that arrive after a newer request.
+        if (requestId !== loadRequestSeq.current) {
+          return;
+        }
+
         setDataSource(source);
         setRawPois(poisWithDistance);
         if (poisWithDistance.length === 0) {
@@ -99,10 +107,15 @@ export function MapScreen() {
           setApiMessage('fallbackData');
         }
       } catch {
+        if (requestId !== loadRequestSeq.current) {
+          return;
+        }
         setRawPois([]);
         setApiMessage('apiError');
       } finally {
-        setLoadingPois(false);
+        if (requestId === loadRequestSeq.current) {
+          setLoadingPois(false);
+        }
       }
     },
     []
@@ -209,6 +222,7 @@ export function MapScreen() {
                 key={key}
                 onPress={() => {
                   setCategory(key);
+                  setSearch('');
                   setSelectedPoi(null);
                 }}
                 style={[styles.chip, active && styles.chipActive]}
