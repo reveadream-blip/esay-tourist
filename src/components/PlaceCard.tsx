@@ -7,6 +7,7 @@ export type Place = {
   category: string
   name: string
   photo: string
+  wikipediaTag?: string
   lat: number
   lng: number
   rating: number

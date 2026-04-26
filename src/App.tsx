@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 import { useTranslation } from 'react-i18next'
@@ -9,7 +9,6 @@ import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { CategoryBar, type CategoryId } from './components/CategoryBar'
 import { PlaceCard, type Place } from './components/PlaceCard'
-import { getGooglePlacePhotoUrl, hasGooglePlacesKey } from './services/googlePlaces'
 
 const EARTH_RADIUS_KM = 6371
 const MAX_RADIUS_METERS = 50000
@@ -128,6 +127,21 @@ const getPlacePhotoUrl = (tags: Record<string, string>, lat: number, lng: number
   return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=16&size=1200x800&markers=${lat},${lng},red-pushpin`
 }
 
+const getWikipediaThumbnail = async (wikipediaTag: string): Promise<string | null> => {
+  const separatorIndex = wikipediaTag.indexOf(':')
+  if (separatorIndex <= 0) return null
+
+  const lang = wikipediaTag.slice(0, separatorIndex)
+  const title = wikipediaTag.slice(separatorIndex + 1).replace(/ /g, '_')
+  const endpoint = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`
+
+  const response = await fetch(endpoint)
+  if (!response.ok) return null
+
+  const data = (await response.json()) as { thumbnail?: { source?: string } }
+  return data.thumbnail?.source ?? null
+}
+
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const buildOverpassQuery = (lat: number, lng: number, radiusMeters: number, searchTerm = ''): string => {
@@ -172,6 +186,7 @@ function App() {
   const [places, setPlaces] = useState<Place[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [locationError, setLocationError] = useState(false)
+  const attemptedWikipediaPhotoIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -228,6 +243,7 @@ function App() {
             category: categoryId,
             name,
             photo: getPlacePhotoUrl(tags, lat, lng),
+            wikipediaTag: tags.wikipedia,
             lat,
             lng,
             rating,
@@ -295,44 +311,55 @@ function App() {
   }, [position, debouncedSearch])
 
   useEffect(() => {
-    if (!hasGooglePlacesKey || places.length === 0) return
+    const candidates = places.filter(
+      (place) =>
+        Boolean(place.wikipediaTag) &&
+        place.photo.includes('staticmap.openstreetmap.de') &&
+        !attemptedWikipediaPhotoIdsRef.current.has(place.id),
+    )
 
-    const controller = new AbortController()
-    const enrichPhotos = async () => {
-      const subset = places.slice(0, 20)
-      const updates = await Promise.all(
-        subset.map(async (place) => {
-          const cacheKey = `easytravel-google-photo-${place.id}`
-          const cached = sessionStorage.getItem(cacheKey)
-          if (cached) {
-            return { id: place.id, photo: cached }
-          }
+    if (candidates.length === 0) return
+
+    candidates.forEach((place) => attemptedWikipediaPhotoIdsRef.current.add(place.id))
+
+    let cancelled = false
+    const enrichWithWikipediaPhotos = async () => {
+      const photoUpdates = await Promise.all(
+        candidates.map(async (place) => {
+          if (!place.wikipediaTag) return null
 
           try {
-            const photoUrl = await getGooglePlacePhotoUrl(place.name, place.lat, place.lng)
-            if (!photoUrl) return null
-            sessionStorage.setItem(cacheKey, photoUrl)
-            return { id: place.id, photo: photoUrl }
+            const thumbnailUrl = await getWikipediaThumbnail(place.wikipediaTag)
+            if (!thumbnailUrl) return null
+            return { id: place.id, photo: thumbnailUrl }
           } catch {
             return null
           }
         }),
       )
 
-      if (controller.signal.aborted) return
-      const updateMap = new Map(updates.filter((item): item is { id: string; photo: string } => Boolean(item)).map((item) => [item.id, item.photo]))
-      if (updateMap.size === 0) return
+      if (cancelled) return
+
+      const updates = new Map(
+        photoUpdates
+          .filter((item): item is { id: string; photo: string } => Boolean(item))
+          .map((item) => [item.id, item.photo]),
+      )
+
+      if (updates.size === 0) return
 
       setPlaces((currentPlaces) =>
         currentPlaces.map((place) => {
-          const nextPhoto = updateMap.get(place.id)
+          const nextPhoto = updates.get(place.id)
           return nextPhoto ? { ...place, photo: nextPhoto } : place
         }),
       )
     }
 
-    void enrichPhotos()
-    return () => controller.abort()
+    void enrichWithWikipediaPhotos()
+    return () => {
+      cancelled = true
+    }
   }, [places])
 
   const filteredPlaces = useMemo(() => {
