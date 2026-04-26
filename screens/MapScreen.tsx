@@ -232,7 +232,16 @@ export function MapScreen() {
             {t('resultsCount', { count: rawPois.length })}
           </Text>
           {dataSource ? (
-            <View style={styles.sourceBadge}>
+            <Pressable
+              style={styles.sourceBadge}
+              onPress={() => {
+                if (dataSource !== 'osm') {
+                  return;
+                }
+                const url = `https://www.openstreetmap.org/?mlat=${userCoords.lat}&mlon=${userCoords.lng}#map=12/${userCoords.lat}/${userCoords.lng}`;
+                Linking.openURL(url);
+              }}
+            >
               <Text style={styles.sourceBadgeText}>
                 {dataSource === 'google'
                   ? 'Google'
@@ -240,7 +249,7 @@ export function MapScreen() {
                     ? 'OpenStreetMap'
                     : t('offlineFallback')}
               </Text>
-            </View>
+            </Pressable>
           ) : null}
         </View>
         {selectedPoi && (
