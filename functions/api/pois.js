@@ -1,4 +1,5 @@
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
+const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -116,6 +117,51 @@ function toPoi(el, preferredLanguage) {
   };
 }
 
+function toPoiFromNominatim(item) {
+  const lat = Number(item.lat);
+  const lon = Number(item.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const name = item.name || (item.display_name ? String(item.display_name).split(',')[0] : null);
+  if (!name) return null;
+  return {
+    id: `nominatim-${item.osm_type || 'x'}-${item.osm_id || Math.random().toString(36).slice(2)}`,
+    name,
+    latitude: lat,
+    longitude: lon,
+    address: item.display_name || undefined,
+  };
+}
+
+async function fetchNominatimFallback(lat, lng, radius, query, preferredLanguage) {
+  const q = String(query || '').trim();
+  if (!q) return [];
+  const r = Math.min(Math.max(Number(radius) || 50000, 500), 50000);
+  const latDelta = r / 111000;
+  const lonDelta = r / (111000 * Math.max(Math.cos((lat * Math.PI) / 180), 0.2));
+  const left = lng - lonDelta;
+  const right = lng + lonDelta;
+  const top = lat + latDelta;
+  const bottom = lat - latDelta;
+
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    q,
+    bounded: '1',
+    limit: '50',
+    viewbox: `${left},${top},${right},${bottom}`,
+    'accept-language': preferredLanguage || 'en',
+  });
+
+  const res = await fetch(`${NOMINATIM}?${params.toString()}`, {
+    headers: {
+      'User-Agent': 'EasyTourist/1.0 (Cloudflare Pages Function)',
+    },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data || []).map(toPoiFromNominatim).filter(Boolean);
+}
+
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
   const lat = Number(url.searchParams.get('lat'));
@@ -146,9 +192,12 @@ ${overpassQueryForCategory(category, lat, lng, radius, query)}`;
   }
 
   const data = await res.json();
-  const list = (data.elements || [])
+  let list = (data.elements || [])
     .map((el) => toPoi(el, preferredLanguage))
     .filter(Boolean)
     .slice(0, 300);
+  if (list.length === 0 && query.trim()) {
+    list = await fetchNominatimFallback(lat, lng, radius, query, preferredLanguage);
+  }
   return json({ pois: list, source: 'osm-proxy' });
 }

@@ -181,6 +181,16 @@ export async function fetchNearbyPois(
       preferredLanguage,
       radiusMeters
     );
+    if (pois.length === 0 && searchTerm.trim()) {
+      pois = await fetchNearbyPoisViaCloudflareProxy(
+        latitude,
+        longitude,
+        categoryKey,
+        searchTerm,
+        preferredLanguage,
+        radiusMeters
+      );
+    }
   } catch {
     // On web, Overpass can be blocked by CORS; fallback to Cloudflare Pages Function proxy.
     try {
