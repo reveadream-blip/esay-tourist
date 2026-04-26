@@ -12,7 +12,7 @@ function json(data, status = 200) {
 }
 
 function overpassQueryForCategory(categoryKey, lat, lon, radius, searchTerm) {
-  const r = Math.min(Math.max(Number(radius) || 2000, 200), 5000);
+  const r = Math.min(Math.max(Number(radius) || 50000, 200), 50000);
   function escapeRegex(input) {
     return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
@@ -104,7 +104,7 @@ export async function onRequestGet(context) {
   const lng = Number(url.searchParams.get('lng'));
   const category = url.searchParams.get('category') || 'all';
   const query = url.searchParams.get('q') || '';
-  const radius = Number(url.searchParams.get('radius') || '2000');
+  const radius = Number(url.searchParams.get('radius') || '50000');
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return json({ error: 'Invalid lat/lng' }, 400);
@@ -127,6 +127,6 @@ ${overpassQueryForCategory(category, lat, lng, radius, query)}`;
   }
 
   const data = await res.json();
-  const list = (data.elements || []).map(toPoi).filter(Boolean).slice(0, 50);
+  const list = (data.elements || []).map(toPoi).filter(Boolean).slice(0, 300);
   return json({ pois: list, source: 'osm-proxy' });
 }

@@ -2,10 +2,11 @@
   "appName": "Easy Tourist",
   "locationDenied": "Location access is required to show nearby places.",
   "locationError": "Could not get your position.",
-  "loadingMap": "Loading mapâ€¦",
+  "loadingMap": "Loading map...",
   "heroSubtitle": "Your local guide to discover the city like a traveler.",
-  "searchPlaceholder": "Search by nameâ€¦",
+  "searchPlaceholder": "Search anything: spa, massage, scooter, car, diving, monuments...",
   "resultsCount": "{{count}} places around you",
+  "distanceAway": "{{distance}} away",
   "offlineFallback": "Backup mode",
   "refresh": "Refresh",
   "route": "Directions",
@@ -25,4 +26,3 @@
     "bakery": "Bakeries"
   }
 }
-

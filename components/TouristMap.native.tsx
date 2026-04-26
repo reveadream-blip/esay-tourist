@@ -34,12 +34,19 @@ export function TouristMap({
       >
         {pois.map((poi) => {
           const selected = poi.id === selectedPoiId;
+          const distanceLabel =
+            poi.distanceMeters == null
+              ? null
+              : poi.distanceMeters < 1000
+                ? `${poi.distanceMeters} m`
+                : `${(poi.distanceMeters / 1000).toFixed(1)} km`;
+          const description = [poi.address, distanceLabel].filter(Boolean).join(' - ');
           return (
             <Marker
               key={poi.id}
               coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
               title={poi.name}
-              description={poi.address}
+              description={description || undefined}
               pinColor={selected ? '#ea580c' : '#16a34a'}
               onPress={() => onSelectPoi(poi)}
             />

@@ -11,6 +11,7 @@ export type Poi = {
   latitude: number;
   longitude: number;
   address?: string;
+  distanceMeters?: number;
 };
 
 /** Maps app categories to Google Places `type` (Nearby Search). */
@@ -135,14 +136,14 @@ async function fetchNearbyPoisGoogle(
 /**
  * Lieux proches : Google Places si `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY` est défini, sinon OpenStreetMap (gratuit).
  * Google : activer Places API + facturation sur Google Cloud.
- * @param radiusMeters default 2000
+ * @param radiusMeters default 50000 (50 km)
  */
 export async function fetchNearbyPois(
   latitude: number,
   longitude: number,
   categoryKey: string,
   searchTerm = '',
-  radiusMeters = 2000
+  radiusMeters = 50000
 ): Promise<{ pois: Poi[]; source: PoiDataSource }> {
   if (getApiKey()) {
     const pois = await fetchNearbyPoisGoogle(

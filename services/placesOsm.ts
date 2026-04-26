@@ -47,7 +47,7 @@ function overpassQueryForCategory(
   radius: number,
   searchTerm: string
 ) {
-  const r = Math.min(Math.max(radius, 200), 5000);
+  const r = Math.min(Math.max(radius, 200), 50000);
   const keywordPattern = buildKeywordPattern(searchTerm);
   const a = (filters: string) =>
     `(
@@ -127,7 +127,7 @@ export async function fetchNearbyPoisOsm(
   longitude: number,
   categoryKey: string,
   searchTerm = '',
-  radiusMeters = 2000
+  radiusMeters = 50000
 ): Promise<Poi[]> {
   const body = `[out:json][timeout:25];
 ${overpassQueryForCategory(categoryKey, latitude, longitude, radiusMeters, searchTerm)}`;
@@ -160,5 +160,5 @@ ${overpassQueryForCategory(categoryKey, latitude, longitude, radiusMeters, searc
     seen.add(k);
     deduped.push(p);
   }
-  return deduped.slice(0, 50);
+  return deduped.slice(0, 300);
 }

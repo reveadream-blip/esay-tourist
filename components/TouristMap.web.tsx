@@ -2,6 +2,16 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { TouristMapProps } from './TouristMap.types';
 
+function formatDistanceMeters(meters?: number): string | null {
+  if (meters == null) {
+    return null;
+  }
+  if (meters < 1000) {
+    return `${meters} m`;
+  }
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
 export function TouristMap({ pois, selectedPoiId, onSelectPoi }: TouristMapProps) {
   return (
     <View style={styles.container}>
@@ -22,6 +32,9 @@ export function TouristMap({ pois, selectedPoiId, onSelectPoi }: TouristMapProps
             >
               <Text style={styles.itemTitle}>{poi.name}</Text>
               {poi.address ? <Text style={styles.itemSub}>{poi.address}</Text> : null}
+              {formatDistanceMeters(poi.distanceMeters) ? (
+                <Text style={styles.itemDistance}>{formatDistanceMeters(poi.distanceMeters)}</Text>
+              ) : null}
             </Pressable>
           );
         })}
@@ -53,4 +66,5 @@ const styles = StyleSheet.create({
   itemSelected: { borderColor: '#06b6d4', backgroundColor: '#083344' },
   itemTitle: { color: '#f8fafc', fontWeight: '700' },
   itemSub: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
+  itemDistance: { color: '#67e8f9', fontSize: 12, marginTop: 6, fontWeight: '700' },
 });

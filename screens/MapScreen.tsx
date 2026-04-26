@@ -21,6 +21,32 @@ import {
 import { openNavigation } from '../utils/openNavigation';
 
 const CATEGORY_KEYS = Object.keys(categoryToPlaceType) as (keyof typeof categoryToPlaceType)[];
+const SEARCH_RADIUS_METERS = 50000;
+
+function toRad(value: number): number {
+  return (value * Math.PI) / 180;
+}
+
+function getDistanceMeters(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
+  const earthRadius = 6371000;
+  const dLat = toRad(toLat - fromLat);
+  const dLng = toRad(toLng - fromLng);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(fromLat)) *
+      Math.cos(toRad(toLat)) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(earthRadius * c);
+}
+
+function formatDistanceMeters(meters: number): string {
+  if (meters < 1000) {
+    return `${meters} m`;
+  }
+  return `${(meters / 1000).toFixed(1)} km`;
+}
 
 export function MapScreen() {
   const { t } = useTranslation();
@@ -41,10 +67,22 @@ export function MapScreen() {
       setApiMessage(null);
       setLoadingPois(true);
       try {
-        const { pois, source } = await fetchNearbyPois(lat, lng, cat, query);
+        const { pois, source } = await fetchNearbyPois(
+          lat,
+          lng,
+          cat,
+          query,
+          SEARCH_RADIUS_METERS
+        );
+        const poisWithDistance = pois
+          .map((poi) => ({
+            ...poi,
+            distanceMeters: getDistanceMeters(lat, lng, poi.latitude, poi.longitude),
+          }))
+          .sort((a, b) => (a.distanceMeters ?? 0) - (b.distanceMeters ?? 0));
         setDataSource(source);
-        setRawPois(pois);
-        if (pois.length === 0) {
+        setRawPois(poisWithDistance);
+        if (poisWithDistance.length === 0) {
           setApiMessage('noResults');
         } else if (source === 'osm') {
           setApiMessage('dataSourceOsm');
@@ -207,6 +245,11 @@ export function MapScreen() {
                 {selectedPoi.address}
               </Text>
             ) : null}
+            {selectedPoi.distanceMeters != null ? (
+              <Text style={styles.selectionDistance}>
+                {t('distanceAway', { distance: formatDistanceMeters(selectedPoi.distanceMeters) })}
+              </Text>
+            ) : null}
             <Pressable onPress={onDirections} style={styles.routeBtn}>
               <Text style={styles.routeBtnText}>{t('route')}</Text>
             </Pressable>
@@ -314,6 +357,7 @@ const styles = StyleSheet.create({
   },
   selectionTitle: { color: '#f8fafc', fontWeight: '600', fontSize: 16 },
   selectionSub: { color: '#94a3b8', fontSize: 13, marginTop: 2 },
+  selectionDistance: { color: '#67e8f9', fontSize: 12, marginTop: 6, fontWeight: '600' },
   routeBtn: {
     marginTop: 10,
     alignSelf: 'flex-start',
