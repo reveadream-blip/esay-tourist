@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "EasyTourist",
+    "name": "Easy Tourist",
     "slug": "EasyTourist",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,21 +10,49 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0f172a"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Easy Tourist a besoin de votre position pour afficher les points d'intérêt et les itinéraires autour de vous."
+      },
+      "config": {
+        "googleMapsApiKey": "REMPLACEZ_PAR_VOTRE_CLE_GOOGLE_MAPS"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0f172a"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "REMPLACEZ_PAR_VOTRE_CLE_GOOGLE_MAPS"
+        }
+      }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "name": "Easy Tourist",
+      "shortName": "EasyTourist",
+      "themeColor": "#0f172a",
+      "backgroundColor": "#0f172a",
+      "display": "standalone"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Autorisez Easy Tourist à utiliser votre position pour des lieux et itinéraires proches de vous."
+        }
+      ]
+    ]
   }
 }

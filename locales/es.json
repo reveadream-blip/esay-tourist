@@ -1,0 +1,23 @@
+{
+  "appName": "Easy Tourist",
+  "locationDenied": "Se necesita acceso a la ubicación para mostrar lugares cercanos.",
+  "locationError": "No se pudo obtener tu posición.",
+  "loadingMap": "Cargando mapa…",
+  "searchPlaceholder": "Buscar por nombre…",
+  "refresh": "Actualizar",
+  "route": "Ruta",
+  "openMapsError": "No se pudo abrir la app de mapas.",
+  "dataSourceOsm": "Lugares de OpenStreetMap. Añade una clave de Google para usar Google Places.",
+  "noApiKey": "Añade EXPO_PUBLIC_GOOGLE_PLACES_API_KEY en un archivo .env (Places + Maps SDK activadas).",
+  "noResults": "No se encontraron lugares cerca.",
+  "apiError": "Error al buscar lugares.",
+  "categories": {
+    "all": "Todo",
+    "restaurant": "Restaurantes",
+    "hotel": "Hoteles",
+    "shop": "Tiendas",
+    "travel": "Excursiones",
+    "grocery": "Supermercados",
+    "bakery": "Panaderías"
+  }
+}
