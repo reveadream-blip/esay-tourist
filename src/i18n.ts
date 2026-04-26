@@ -8,8 +8,8 @@ i18n.use(LanguageDetector).use(initReactI18next).init({
   load: 'languageOnly',
   nonExplicitSupportedLngs: true,
   detection: {
-    order: ['querystring', 'localStorage', 'navigator', 'htmlTag'],
-    caches: ['localStorage'],
+    order: ['navigator', 'htmlTag', 'querystring'],
+    caches: [],
     convertDetectedLanguage: (lng) => lng.split('-')[0].toLowerCase(),
   },
   interpolation: { escapeValue: false },
