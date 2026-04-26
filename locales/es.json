@@ -28,5 +28,6 @@
     "enableLocation":  "Activar mi ubicación",
     "openSettings":  "Abrir ajustes",
     "retry":  "Reintentar",
-    "locationPrompt":  "Permite la ubicación para mostrar lugares a tu alrededor."
+    "locationPrompt":  "Permite la ubicación para mostrar lugares a tu alrededor.",
+    "locationApproximate":  "Se detecto una posicion aproximada. Activa la ubicacion precisa en tu telefono."
 }

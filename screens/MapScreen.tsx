@@ -62,28 +62,7 @@ export function MapScreen() {
   const [loadingPois, setLoadingPois] = useState(false);
   const [apiMessage, setApiMessage] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<PoiDataSource | null>(null);
-
-  const requestUserLocation = useCallback(async () => {
-    setLoadingLocation(true);
-    setLocationError(null);
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      setPermissionDenied(true);
-      setLoadingLocation(false);
-      return;
-    }
-    setPermissionDenied(false);
-    try {
-      const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-    } catch {
-      setLocationError('locationError');
-    } finally {
-      setLoadingLocation(false);
-    }
-  }, []);
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
 
   const loadPois = useCallback(
     async (
@@ -128,6 +107,40 @@ export function MapScreen() {
     },
     []
   );
+
+  const requestUserLocation = useCallback(async (): Promise<{ lat: number; lng: number } | null> => {
+    setLoadingLocation(true);
+    setLocationError(null);
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      setPermissionDenied(true);
+      setLoadingLocation(false);
+      return null;
+    }
+    setPermissionDenied(false);
+    try {
+      let pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        mayShowUserSettingsDialog: true,
+      });
+      // If browser/device gives a very rough position, retry with best GPS accuracy.
+      if (pos.coords.accuracy != null && pos.coords.accuracy > 3000) {
+        pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.BestForNavigation,
+          mayShowUserSettingsDialog: true,
+        });
+      }
+      const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      setUserCoords(coords);
+      setLocationAccuracy(pos.coords.accuracy ?? null);
+      return coords;
+    } catch {
+      setLocationError('locationError');
+      return null;
+    } finally {
+      setLoadingLocation(false);
+    }
+  }, []);
 
   useEffect(() => {
     requestUserLocation();
@@ -190,6 +203,9 @@ export function MapScreen() {
         <View style={styles.hero}>
           <Text style={styles.title}>{t('appName')}</Text>
           <Text style={styles.subtitle}>{t('heroSubtitle')}</Text>
+          {locationAccuracy != null && locationAccuracy > 3000 ? (
+            <Text style={styles.accuracyWarning}>{t('locationApproximate')}</Text>
+          ) : null}
         </View>
         <TextInput
           value={search}
@@ -272,16 +288,20 @@ export function MapScreen() {
         <View style={styles.toolbar}>
           {loadingPois ? <ActivityIndicator /> : null}
           <Pressable
-            onPress={() =>
-              userCoords &&
-              loadPois(
-                userCoords.lat,
-                userCoords.lng,
+            onPress={async () => {
+              const fresh = await requestUserLocation();
+              const coords = fresh ?? userCoords;
+              if (!coords) {
+                return;
+              }
+              await loadPois(
+                coords.lat,
+                coords.lng,
                 category,
                 search,
                 i18n.resolvedLanguage || i18n.language
-              )
-            }
+              );
+            }}
             style={styles.refreshBtn}
           >
             <Text style={styles.refreshText}>{t('refresh')}</Text>
@@ -329,6 +349,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: '#93c5fd',
     fontSize: 13,
+  },
+  accuracyWarning: {
+    marginTop: 6,
+    color: '#fbbf24',
+    fontSize: 12,
+    fontWeight: '600',
   },
   search: {
     backgroundColor: '#0f172a',

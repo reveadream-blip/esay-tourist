@@ -28,5 +28,6 @@
     "enableLocation":  "Activer ma position",
     "openSettings":  "Ouvrir les réglages",
     "retry":  "Réessayer",
-    "locationPrompt":  "Autorisez la géolocalisation pour afficher les lieux autour de vous."
+    "locationPrompt":  "Autorisez la géolocalisation pour afficher les lieux autour de vous.",
+    "locationApproximate":  "Position approximative detectee. Activez la localisation precise sur votre telephone."
 }
