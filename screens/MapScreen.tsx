@@ -12,7 +12,12 @@ import { useTranslation } from 'react-i18next';
 import * as Location from 'expo-location';
 
 import { TouristMap } from '../components/TouristMap';
-import { categoryToPlaceType, fetchNearbyPois, type Poi } from '../services/placesApi';
+import {
+  categoryToPlaceType,
+  fetchNearbyPois,
+  type Poi,
+  type PoiDataSource,
+} from '../services/placesApi';
 import { openNavigation } from '../utils/openNavigation';
 
 const CATEGORY_KEYS = Object.keys(categoryToPlaceType) as (keyof typeof categoryToPlaceType)[];
@@ -29,6 +34,7 @@ export function MapScreen() {
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [loadingPois, setLoadingPois] = useState(false);
   const [apiMessage, setApiMessage] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<PoiDataSource | null>(null);
 
   const loadPois = useCallback(
     async (lat: number, lng: number, cat: string) => {
@@ -36,11 +42,14 @@ export function MapScreen() {
       setLoadingPois(true);
       try {
         const { pois, source } = await fetchNearbyPois(lat, lng, cat);
+        setDataSource(source);
         setRawPois(pois);
         if (pois.length === 0) {
           setApiMessage('noResults');
         } else if (source === 'osm') {
           setApiMessage('dataSourceOsm');
+        } else if (source === 'fallback') {
+          setApiMessage('fallbackData');
         }
       } catch {
         setRawPois([]);
@@ -140,7 +149,10 @@ export function MapScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.chrome}>
-        <Text style={styles.title}>{t('appName')}</Text>
+        <View style={styles.hero}>
+          <Text style={styles.title}>{t('appName')}</Text>
+          <Text style={styles.subtitle}>{t('heroSubtitle')}</Text>
+        </View>
         <TextInput
           value={search}
           onChangeText={setSearch}
@@ -174,6 +186,22 @@ export function MapScreen() {
           })}
         </ScrollView>
         {apiMessage && <Text style={styles.apiBanner}>{t(apiMessage)}</Text>}
+        <View style={styles.metaRow}>
+          <Text style={styles.countText}>
+            {t('resultsCount', { count: filteredPois.length })}
+          </Text>
+          {dataSource ? (
+            <View style={styles.sourceBadge}>
+              <Text style={styles.sourceBadgeText}>
+                {dataSource === 'google'
+                  ? 'Google'
+                  : dataSource === 'osm'
+                    ? 'OpenStreetMap'
+                    : t('offlineFallback')}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         {selectedPoi && (
           <View style={styles.selection}>
             <Text style={styles.selectionTitle} numberOfLines={2}>
@@ -214,57 +242,92 @@ export function MapScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0f172a' },
+  root: { flex: 1, backgroundColor: '#020617' },
   mapWrap: { flex: 1 },
   chrome: {
-    paddingTop: 48,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
+    paddingTop: 52,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+    backgroundColor: '#020617',
+  },
+  hero: {
     backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
   },
   title: {
     color: '#f8fafc',
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  subtitle: {
+    marginTop: 4,
+    color: '#93c5fd',
+    fontSize: 13,
   },
   search: {
-    backgroundColor: '#1e293b',
+    backgroundColor: '#0f172a',
     color: '#f1f5f9',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
   },
-  chips: { gap: 8, paddingVertical: 4 },
+  chips: { gap: 8, paddingVertical: 4, paddingBottom: 8 },
   chip: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: '#334155',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     marginRight: 4,
   },
   chipActive: { backgroundColor: '#38bdf8', borderColor: '#38bdf8' },
   chipText: { color: '#e2e8f0', fontSize: 13 },
   chipTextActive: { color: '#0f172a', fontWeight: '600' },
+  metaRow: {
+    marginTop: 2,
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  countText: { color: '#bae6fd', fontSize: 12 },
+  sourceBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#082f49',
+    borderColor: '#0ea5e9',
+    borderWidth: 1,
+  },
+  sourceBadgeText: { color: '#e0f2fe', fontSize: 11, fontWeight: '700' },
   selection: {
     marginTop: 8,
-    padding: 10,
-    backgroundColor: '#1e293b',
-    borderRadius: 10,
+    padding: 12,
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    borderColor: '#1e293b',
+    borderWidth: 1,
   },
   selectionTitle: { color: '#f8fafc', fontWeight: '600', fontSize: 16 },
   selectionSub: { color: '#94a3b8', fontSize: 13, marginTop: 2 },
   routeBtn: {
     marginTop: 10,
     alignSelf: 'flex-start',
-    backgroundColor: '#22c55e',
+    backgroundColor: '#34d399',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 10,
   },
-  routeBtnText: { color: '#052e16', fontWeight: '700' },
+  routeBtnText: { color: '#064e3b', fontWeight: '800' },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -272,8 +335,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   refreshBtn: { paddingVertical: 4, paddingHorizontal: 4 },
-  refreshText: { color: '#38bdf8', fontWeight: '600' },
-  apiBanner: { color: '#fbbf24', fontSize: 12, marginTop: 4 },
+  refreshText: { color: '#38bdf8', fontWeight: '700' },
+  apiBanner: { color: '#fbbf24', fontSize: 12, marginTop: 4, marginBottom: 2 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   message: { textAlign: 'center', color: '#0f172a', fontSize: 16 },
   muted: { marginTop: 8, color: '#64748b' },

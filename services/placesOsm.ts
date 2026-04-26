@@ -22,34 +22,34 @@ out center 80;`;
 
   switch (categoryKey) {
     case 'restaurant':
-      return a(`  nwr[amenity=restaurant](around:${r},${lat},${lon})`);
+      return a(`  nwr[amenity=restaurant](around:${r},${lat},${lon});`);
     case 'hotel':
       return a(`  nwr[tourism=hotel](around:${r},${lat},${lon});
-  nwr[amenity=hotel](around:${r},${lat},${lon})`);
+  nwr[amenity=hotel](around:${r},${lat},${lon});`);
     case 'shop':
       return a(`  nwr[shop=mall](around:${r},${lat},${lon});
   nwr[shop=department_store](around:${r},${lat},${lon});
-  nwr[shop=clothes](around:${r},${lat},${lon})`);
+  nwr[shop=clothes](around:${r},${lat},${lon});`);
     case 'travel':
       return a(`  nwr[office=travel_agent](around:${r},${lat},${lon});
-  nwr[tourism=information](around:${r},${lat},${lon})`);
+  nwr[tourism=information](around:${r},${lat},${lon});`);
     case 'grocery':
       return a(`  nwr[shop=supermarket](around:${r},${lat},${lon});
   nwr[shop=convenience](around:${r},${lat},${lon});
-  nwr[shop=grocery](around:${r},${lat},${lon})`);
+  nwr[shop=grocery](around:${r},${lat},${lon});`);
     case 'bakery':
-      return a(`  nwr[shop=bakery](around:${r},${lat},${lon})`);
+      return a(`  nwr[shop=bakery](around:${r},${lat},${lon});`);
     case 'all':
     default:
       return a(`  nwr[amenity=restaurant](around:${r},${lat},${lon});
   nwr[tourism=hotel](around:${r},${lat},${lon});
   nwr[shop=supermarket](around:${r},${lat},${lon});
   nwr[shop=bakery](around:${r},${lat},${lon});
-  nwr[office=travel_agent](around:${r},${lat},${lon})`);
+  nwr[office=travel_agent](around:${r},${lat},${lon});`);
   }
 }
 
-function elementToPoi(el: OsmElement, index: number): Poi | null {
+function elementToPoi(el: OsmElement): Poi | null {
   const lat = el.lat ?? el.center?.lat;
   const lon = el.lon ?? el.center?.lon;
   if (lat == null || lon == null) {
@@ -101,7 +101,7 @@ ${overpassQueryForCategory(categoryKey, latitude, longitude, radiusMeters)}`;
 
   const json = (await res.json()) as { elements?: OsmElement[] };
   const list = (json.elements ?? [])
-    .map((el, i) => elementToPoi(el, i))
+    .map((el) => elementToPoi(el))
     .filter((p): p is Poi => p != null);
 
   const seen = new Set<string>();

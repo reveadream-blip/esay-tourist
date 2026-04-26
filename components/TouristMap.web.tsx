@@ -6,9 +6,9 @@ export function TouristMap({ pois, selectedPoiId, onSelectPoi }: TouristMapProps
   return (
     <View style={styles.container}>
       <View style={styles.banner}>
-        <Text style={styles.bannerTitle}>Web mode</Text>
+        <Text style={styles.bannerTitle}>Explore nearby places</Text>
         <Text style={styles.bannerText}>
-          react-native-maps n&apos;est pas rendu sur web dans cette configuration.
+          Web list mode - select a place to open directions.
         </Text>
       </View>
       <ScrollView contentContainerStyle={styles.list}>
@@ -34,21 +34,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#020617' },
   banner: {
     margin: 12,
-    borderRadius: 10,
-    backgroundColor: '#1e293b',
-    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#0f172a',
+    borderColor: '#1e293b',
+    borderWidth: 1,
+    padding: 12,
   },
-  bannerTitle: { color: '#f8fafc', fontWeight: '700', marginBottom: 4 },
+  bannerTitle: { color: '#f8fafc', fontWeight: '800', marginBottom: 4 },
   bannerText: { color: '#94a3b8', fontSize: 12 },
   list: { paddingHorizontal: 12, paddingBottom: 12, gap: 8 },
   item: {
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: '#0f172a',
     borderWidth: 1,
     borderColor: '#334155',
-    padding: 10,
+    padding: 12,
   },
-  itemSelected: { borderColor: '#22c55e', backgroundColor: '#052e16' },
-  itemTitle: { color: '#f8fafc', fontWeight: '600' },
+  itemSelected: { borderColor: '#06b6d4', backgroundColor: '#083344' },
+  itemTitle: { color: '#f8fafc', fontWeight: '700' },
   itemSub: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
 });

@@ -35,7 +35,7 @@ export function hasPlacesApiKey(): boolean {
 }
 
 /** Source utilisée côté UI (affichage discret). */
-export type PoiDataSource = 'google' | 'osm';
+export type PoiDataSource = 'google' | 'osm' | 'fallback';
 
 async function fetchNearbyPoisViaCloudflareProxy(
   latitude: number,
@@ -55,6 +55,31 @@ async function fetchNearbyPoisViaCloudflareProxy(
   }
   const json = (await res.json()) as { pois?: Poi[] };
   return json.pois ?? [];
+}
+
+function fallbackPois(
+  latitude: number,
+  longitude: number,
+  categoryKey: string
+): Poi[] {
+  const labels: Record<string, string[]> = {
+    all: ['City Center', 'Tourist Info', 'Local Market', 'Scenic Spot'],
+    restaurant: ['Bistro Soleil', 'Ocean Grill', 'Casa Pasta', 'Street Food Corner'],
+    hotel: ['Grand Horizon Hotel', 'City Nest Hotel', 'Blue Bay Resort', 'Urban Stay'],
+    shop: ['Central Mall', 'Artisan Boutique', 'Souvenir House', 'Fashion Point'],
+    travel: ['Adventure Tours', 'Easy Excursions', 'Local Guide Hub', 'City Trips'],
+    grocery: ['Fresh Market', 'Daily Grocery', 'Green Basket', 'Mini Mart'],
+    bakery: ['Sunrise Bakery', 'Pain d Or', 'Sweet Oven', 'Morning Bread'],
+  };
+  const names = labels[categoryKey] ?? labels.all;
+
+  return names.map((name, index) => ({
+    id: `fallback-${categoryKey}-${index}`,
+    name,
+    latitude: latitude + 0.002 * (index + 1),
+    longitude: longitude + 0.002 * ((index % 2 === 0 ? 1 : -1) * (index + 1)),
+    address: 'Nearby area',
+  }));
 }
 
 async function fetchNearbyPoisGoogle(
@@ -124,12 +149,16 @@ export async function fetchNearbyPois(
     pois = await fetchNearbyPoisOsm(latitude, longitude, categoryKey, radiusMeters);
   } catch {
     // On web, Overpass can be blocked by CORS; fallback to Cloudflare Pages Function proxy.
-    pois = await fetchNearbyPoisViaCloudflareProxy(
-      latitude,
-      longitude,
-      categoryKey,
-      radiusMeters
-    );
+    try {
+      pois = await fetchNearbyPoisViaCloudflareProxy(
+        latitude,
+        longitude,
+        categoryKey,
+        radiusMeters
+      );
+    } catch {
+      return { pois: fallbackPois(latitude, longitude, categoryKey), source: 'fallback' };
+    }
   }
   return { pois, source: 'osm' };
 }

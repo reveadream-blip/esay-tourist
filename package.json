@@ -8,7 +8,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build:web": "expo export --platform web --output-dir dist",
-    "preview:web": "npx serve dist"
+    "preview:web": "npx serve dist",
+    "déploi": "powershell -ExecutionPolicy Bypass -File ./scripts/deploi.ps1"
   },
   "dependencies": {
     "expo": "~54.0.33",
