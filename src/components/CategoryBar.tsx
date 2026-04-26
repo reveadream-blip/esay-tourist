@@ -3,6 +3,7 @@ import { Building2, Car, Landmark, Martini, Sparkles, TentTree, Utensils, Waves 
 import { useTranslation } from 'react-i18next'
 
 export type CategoryId =
+  | 'all'
   | 'hotels'
   | 'restos'
   | 'bars'
@@ -19,6 +20,7 @@ type Category = {
 }
 
 const categories: Category[] = [
+  { id: 'all', emoji: '🌍', icon: Sparkles },
   { id: 'hotels', emoji: '🏨', icon: Building2 },
   { id: 'restos', emoji: '🍽', icon: Utensils },
   { id: 'bars', emoji: '🍹', icon: Martini },

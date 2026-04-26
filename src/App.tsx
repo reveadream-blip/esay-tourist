@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import L from 'leaflet'
 import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet'
 import { useTranslation } from 'react-i18next'
+import { Search } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
@@ -10,6 +11,7 @@ import { CategoryBar, type CategoryId } from './components/CategoryBar'
 import { PlaceCard, type Place } from './components/PlaceCard'
 
 const EARTH_RADIUS_KM = 6371
+const MAX_RADIUS_METERS = 50000
 
 const basePlaces: Omit<Place, 'distanceMeters'>[] = [
   {
@@ -106,7 +108,8 @@ const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
 
 function App() {
   const { t } = useTranslation()
-  const [category, setCategory] = useState<CategoryId>('hotels')
+  const [category, setCategory] = useState<CategoryId>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [locationError, setLocationError] = useState(false)
@@ -143,7 +146,15 @@ function App() {
     })
   }, [position])
 
-  const filteredPlaces = places.filter((place) => place.category === category)
+  const filteredPlaces = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase()
+
+    return places
+      .filter((place) => place.distanceMeters >= 0 && place.distanceMeters <= MAX_RADIUS_METERS)
+      .filter((place) => (category === 'all' ? true : place.category === category))
+      .filter((place) => (normalizedQuery ? place.name.toLowerCase().includes(normalizedQuery) : true))
+      .sort((a, b) => a.distanceMeters - b.distanceMeters)
+  }, [places, category, searchQuery])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-100 via-white to-indigo-100 px-4 py-5 text-slate-800">
@@ -154,6 +165,20 @@ function App() {
         </header>
 
         <CategoryBar selected={category} onChange={setCategory} />
+
+        <section className="rounded-2xl border border-white/30 bg-white/55 p-3 shadow-xl backdrop-blur-md">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="w-full rounded-xl border border-white/30 bg-white/70 py-2.5 pl-10 pr-3 text-sm text-slate-800 outline-none ring-slate-300 placeholder:text-slate-400 focus:ring-2"
+            />
+          </label>
+          <p className="mt-2 px-1 text-xs font-medium text-slate-600">{t('radiusLabel')}</p>
+        </section>
 
         {position && (
           <section className="overflow-hidden rounded-3xl border border-white/30 bg-white/55 shadow-xl backdrop-blur-md">
