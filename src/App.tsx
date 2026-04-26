@@ -12,81 +12,7 @@ import { PlaceCard, type Place } from './components/PlaceCard'
 
 const EARTH_RADIUS_KM = 6371
 const MAX_RADIUS_METERS = 50000
-
-const basePlaces: Omit<Place, 'distanceMeters'>[] = [
-  {
-    id: 'h-1',
-    category: 'hotels',
-    name: 'Azure Bay Hotel',
-    photo: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80',
-    lat: 0,
-    lng: 0,
-    rating: 4.8,
-  },
-  {
-    id: 'r-1',
-    category: 'restos',
-    name: 'Maison Riviera',
-    photo: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
-    lat: 0,
-    lng: 0,
-    rating: 4.6,
-  },
-  {
-    id: 'b-1',
-    category: 'bars',
-    name: 'Velvet Sky Bar',
-    photo: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=80',
-    lat: 0,
-    lng: 0,
-    rating: 4.5,
-  },
-  {
-    id: 'n-1',
-    category: 'nightlife',
-    name: 'Pulse Night Club',
-    photo: 'https://images.unsplash.com/photo-1571266028243-5e6f56f71b2d?auto=format&fit=crop&w=1200&q=80',
-    lat: 0,
-    lng: 0,
-    rating: 4.4,
-  },
-  {
-    id: 's-1',
-    category: 'spa',
-    name: 'Golden Zen Spa',
-    photo: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=1200&q=80',
-    lat: 0,
-    lng: 0,
-    rating: 4.9,
-  },
-  {
-    id: 'a-1',
-    category: 'activities',
-    name: 'Panorama Adventure',
-    photo: 'https://images.unsplash.com/photo-1488085061387-422e29b40080?auto=format&fit=crop&w=1200&q=80',
-    lat: 0,
-    lng: 0,
-    rating: 4.3,
-  },
-  {
-    id: 'm-1',
-    category: 'monuments',
-    name: 'Heritage Landmark',
-    photo: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1200&q=80',
-    lat: 0,
-    lng: 0,
-    rating: 4.7,
-  },
-  {
-    id: 'c-1',
-    category: 'rentals',
-    name: 'DriveNow Rentals',
-    photo: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1200&q=80',
-    lat: 0,
-    lng: 0,
-    rating: 4.2,
-  },
-]
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
@@ -106,11 +32,95 @@ const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
   return EARTH_RADIUS_KM * c * 1000
 }
 
+type OsmElement = {
+  id: number
+  type: 'node' | 'way' | 'relation'
+  lat?: number
+  lon?: number
+  center?: { lat: number; lon: number }
+  tags?: Record<string, string>
+}
+
+type OsmResponse = {
+  elements: OsmElement[]
+}
+
+const CATEGORY_RULES: Array<{ category: Exclude<CategoryId, 'all'>; match: (tags: Record<string, string>) => boolean }> =
+  [
+    {
+      category: 'hotels',
+      match: (tags) =>
+        ['hotel', 'motel', 'hostel', 'guest_house', 'apartment'].includes(tags.tourism ?? '') ||
+        ['hotel', 'motel'].includes(tags.building ?? ''),
+    },
+    {
+      category: 'restos',
+      match: (tags) => ['restaurant', 'cafe', 'fast_food', 'food_court', 'ice_cream'].includes(tags.amenity ?? ''),
+    },
+    {
+      category: 'bars',
+      match: (tags) => ['bar', 'pub', 'biergarten'].includes(tags.amenity ?? ''),
+    },
+    {
+      category: 'nightlife',
+      match: (tags) => ['nightclub', 'stripclub'].includes(tags.amenity ?? '') || tags.club === 'nightclub',
+    },
+    {
+      category: 'spa',
+      match: (tags) => tags.amenity === 'spa' || tags.leisure === 'spa' || tags.shop === 'massage',
+    },
+    {
+      category: 'monuments',
+      match: (tags) =>
+        ['monument', 'memorial', 'ruins', 'castle', 'archaeological_site'].includes(tags.historic ?? '') ||
+        ['museum', 'attraction', 'artwork', 'viewpoint'].includes(tags.tourism ?? ''),
+    },
+    {
+      category: 'rentals',
+      match: (tags) =>
+        ['car_rental', 'bicycle_rental', 'motorcycle_rental', 'vehicle_rental', 'boat_rental'].includes(
+          tags.amenity ?? '',
+        ) || tags.shop === 'car_rental',
+    },
+    {
+      category: 'activities',
+      match: (tags) =>
+        ['park', 'playground', 'sports_centre', 'fitness_centre', 'water_park', 'marina'].includes(tags.leisure ?? '') ||
+        ['theme_park', 'zoo', 'aquarium', 'gallery'].includes(tags.tourism ?? '') ||
+        tags.amenity === 'marketplace' ||
+        tags.shop === 'mall' ||
+        tags.amenity === 'travel_agency',
+    },
+  ]
+
+const inferCategory = (tags: Record<string, string>): Exclude<CategoryId, 'all'> => {
+  const matched = CATEGORY_RULES.find((rule) => rule.match(tags))
+  return matched?.category ?? 'activities'
+}
+
+const getStableRating = (rawId: string): number => {
+  const seed = rawId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return 3.8 + (seed % 12) / 10
+}
+
+const buildOverpassQuery = (lat: number, lng: number): string => `
+[out:json][timeout:40];
+(
+  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[amenity~"restaurant|cafe|fast_food|food_court|bar|pub|biergarten|nightclub|spa|marketplace|travel_agency|car_rental|bicycle_rental|motorcycle_rental|vehicle_rental|boat_rental"];
+  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[tourism~"hotel|motel|hostel|guest_house|apartment|attraction|museum|artwork|viewpoint|theme_park|zoo|aquarium|gallery"];
+  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[historic~"monument|memorial|ruins|castle|archaeological_site"];
+  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[leisure~"park|playground|sports_centre|fitness_centre|water_park|marina|spa"];
+  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[shop~"mall|car_rental|massage"];
+);
+out center 1000;
+`
+
 function App() {
   const { t } = useTranslation()
   const [category, setCategory] = useState<CategoryId>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null)
+  const [places, setPlaces] = useState<Place[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [locationError, setLocationError] = useState(false)
 
@@ -134,16 +144,70 @@ function App() {
     )
   }, [])
 
-  const places = useMemo(() => {
-    if (!position) return []
+  useEffect(() => {
+    if (!position) return
 
-    return basePlaces.map((place, index) => {
-      const lat = position.lat + (index % 3 === 0 ? 0.006 : -0.004 + (index % 2) * 0.004)
-      const lng = position.lng + (index % 4 === 0 ? 0.008 : -0.006 + (index % 3) * 0.004)
-      const distanceMeters = haversine(position.lat, position.lng, lat, lng)
+    const controller = new AbortController()
+    const loadNearbyPlaces = async () => {
+      setIsLoading(true)
+      try {
+        const response = await fetch(OVERPASS_URL, {
+          method: 'POST',
+          body: buildOverpassQuery(position.lat, position.lng),
+          signal: controller.signal,
+        })
 
-      return { ...place, lat, lng, distanceMeters }
-    })
+        if (!response.ok) {
+          throw new Error(`Overpass failed: ${response.status}`)
+        }
+
+        const data = (await response.json()) as OsmResponse
+        const parsedPlaces = data.elements
+          .reduce<Place[]>((acc, element) => {
+            const lat = element.lat ?? element.center?.lat
+            const lng = element.lon ?? element.center?.lon
+            if (lat === undefined || lng === undefined) return acc
+
+            const tags = element.tags ?? {}
+            const name = tags.name ?? tags['name:en'] ?? tags.brand
+            if (!name) return acc
+
+            const distanceMeters = haversine(position.lat, position.lng, lat, lng)
+            if (distanceMeters > MAX_RADIUS_METERS) return acc
+
+            const id = `${element.type}-${element.id}`
+            const categoryId = inferCategory(tags)
+            const stars = Number(tags.stars)
+            const rating = Number.isFinite(stars) && stars > 0 ? Math.min(5, stars) : getStableRating(id)
+
+            acc.push({
+              id,
+              category: categoryId,
+              name,
+              photo: `https://picsum.photos/seed/${encodeURIComponent(id)}/1200/800`,
+              lat,
+              lng,
+              rating,
+              distanceMeters,
+            })
+            return acc
+          }, [])
+          .filter((place, index, array) => array.findIndex((item) => item.name === place.name) === index)
+
+        setPlaces(parsedPlaces)
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setPlaces([])
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadNearbyPlaces()
+    return () => controller.abort()
   }, [position])
 
   const filteredPlaces = useMemo(() => {
