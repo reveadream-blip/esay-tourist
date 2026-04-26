@@ -1,18 +1,18 @@
-{
+﻿{
   "appName": "Easy Tourist",
-  "locationDenied": "Se necesita acceso a la ubicación para mostrar lugares cercanos.",
-  "locationError": "No se pudo obtener tu posición.",
-  "loadingMap": "Cargando mapa…",
-  "heroSubtitle": "Tu guía local para descubrir la ciudad como un viajero.",
-  "searchPlaceholder": "Buscar por nombre…",
+  "locationDenied": "Se necesita acceso a la ubicaciÃ³n para mostrar lugares cercanos.",
+  "locationError": "No se pudo obtener tu posiciÃ³n.",
+  "loadingMap": "Cargando mapaâ€¦",
+  "heroSubtitle": "Tu guÃ­a local para descubrir la ciudad como un viajero.",
+  "searchPlaceholder": "Buscar por nombreâ€¦",
   "resultsCount": "{{count}} lugares cerca de ti",
   "offlineFallback": "Modo de respaldo",
   "refresh": "Actualizar",
   "route": "Ruta",
   "openMapsError": "No se pudo abrir la app de mapas.",
-  "dataSourceOsm": "Lugares de OpenStreetMap. Añade una clave de Google para usar Google Places.",
+  "dataSourceOsm": "Lugares de OpenStreetMap. AÃ±ade una clave de Google para usar Google Places.",
   "fallbackData": "Se muestran lugares temporales de respaldo.",
-  "noApiKey": "Añade EXPO_PUBLIC_GOOGLE_PLACES_API_KEY en un archivo .env (Places + Maps SDK activadas).",
+  "noApiKey": "AÃ±ade EXPO_PUBLIC_GOOGLE_PLACES_API_KEY en un archivo .env (Places + Maps SDK activadas).",
   "noResults": "No se encontraron lugares cerca.",
   "apiError": "Error al buscar lugares.",
   "categories": {
@@ -22,6 +22,7 @@
     "shop": "Tiendas",
     "travel": "Excursiones",
     "grocery": "Supermercados",
-    "bakery": "Panaderías"
+    "bakery": "PanaderÃ­as"
   }
 }
+

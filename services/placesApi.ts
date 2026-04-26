@@ -41,12 +41,14 @@ async function fetchNearbyPoisViaCloudflareProxy(
   latitude: number,
   longitude: number,
   categoryKey: string,
+  searchTerm: string,
   radiusMeters: number
 ): Promise<Poi[]> {
   const params = new URLSearchParams({
     lat: String(latitude),
     lng: String(longitude),
     category: categoryKey,
+    q: searchTerm,
     radius: String(radiusMeters),
   });
   const res = await fetch(`/api/pois?${params.toString()}`);
@@ -60,7 +62,8 @@ async function fetchNearbyPoisViaCloudflareProxy(
 function fallbackPois(
   latitude: number,
   longitude: number,
-  categoryKey: string
+  categoryKey: string,
+  searchTerm: string
 ): Poi[] {
   const labels: Record<string, string[]> = {
     all: ['City Center', 'Tourist Info', 'Local Market', 'Scenic Spot'],
@@ -72,8 +75,13 @@ function fallbackPois(
     bakery: ['Sunrise Bakery', 'Pain d Or', 'Sweet Oven', 'Morning Bread'],
   };
   const names = labels[categoryKey] ?? labels.all;
+  const q = searchTerm.trim();
+  const selectedNames =
+    q.length > 0
+      ? [`${q} Center`, `${q} Spot`, `${q} Nearby`, `${q} Guide`]
+      : names;
 
-  return names.map((name, index) => ({
+  return selectedNames.map((name, index) => ({
     id: `fallback-${categoryKey}-${index}`,
     name,
     latitude: latitude + 0.002 * (index + 1),
@@ -86,6 +94,7 @@ async function fetchNearbyPoisGoogle(
   latitude: number,
   longitude: number,
   categoryKey: string,
+  searchTerm: string,
   radiusMeters: number
 ): Promise<Poi[]> {
   const key = getApiKey();
@@ -98,6 +107,7 @@ async function fetchNearbyPoisGoogle(
     location: `${latitude},${longitude}`,
     radius: String(radiusMeters),
     type,
+    ...(searchTerm.trim() ? { keyword: searchTerm.trim() } : {}),
     key,
   });
 
@@ -131,6 +141,7 @@ export async function fetchNearbyPois(
   latitude: number,
   longitude: number,
   categoryKey: string,
+  searchTerm = '',
   radiusMeters = 2000
 ): Promise<{ pois: Poi[]; source: PoiDataSource }> {
   if (getApiKey()) {
@@ -138,6 +149,7 @@ export async function fetchNearbyPois(
       latitude,
       longitude,
       categoryKey,
+      searchTerm,
       radiusMeters
     );
     return { pois, source: 'google' };
@@ -146,7 +158,13 @@ export async function fetchNearbyPois(
   let pois: Poi[] = [];
   try {
     const { fetchNearbyPoisOsm } = await import('./placesOsm');
-    pois = await fetchNearbyPoisOsm(latitude, longitude, categoryKey, radiusMeters);
+    pois = await fetchNearbyPoisOsm(
+      latitude,
+      longitude,
+      categoryKey,
+      searchTerm,
+      radiusMeters
+    );
   } catch {
     // On web, Overpass can be blocked by CORS; fallback to Cloudflare Pages Function proxy.
     try {
@@ -154,10 +172,14 @@ export async function fetchNearbyPois(
         latitude,
         longitude,
         categoryKey,
+        searchTerm,
         radiusMeters
       );
     } catch {
-      return { pois: fallbackPois(latitude, longitude, categoryKey), source: 'fallback' };
+      return {
+        pois: fallbackPois(latitude, longitude, categoryKey, searchTerm),
+        source: 'fallback',
+      };
     }
   }
   return { pois, source: 'osm' };

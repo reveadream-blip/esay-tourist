@@ -1,27 +1,28 @@
-{
+﻿{
   "appName": "Easy Tourist",
-  "locationDenied": "L'accès à la position est nécessaire pour afficher les lieux à proximité.",
+  "locationDenied": "L'accÃ¨s Ã  la position est nÃ©cessaire pour afficher les lieux Ã  proximitÃ©.",
   "locationError": "Impossible d'obtenir votre position.",
-  "loadingMap": "Chargement de la carte…",
+  "loadingMap": "Chargement de la carteâ€¦",
   "heroSubtitle": "Votre guide local pour explorer la ville comme un voyageur.",
-  "searchPlaceholder": "Rechercher par nom…",
+  "searchPlaceholder": "Rechercher par nomâ€¦",
   "resultsCount": "{{count}} lieux autour de vous",
   "offlineFallback": "Mode secours",
   "refresh": "Actualiser",
-  "route": "Itinéraire",
+  "route": "ItinÃ©raire",
   "openMapsError": "Impossible d'ouvrir l'application de cartes.",
-  "dataSourceOsm": "Lieux fournis par OpenStreetMap. Ajoutez une clé Google pour utiliser Google Places.",
-  "fallbackData": "Données de secours affichées temporairement.",
-  "noApiKey": "Ajoutez EXPO_PUBLIC_GOOGLE_PLACES_API_KEY dans un fichier .env (API Places + Maps SDK activées).",
-  "noResults": "Aucun lieu trouvé à proximité.",
-  "apiError": "Échec de la recherche de lieux.",
+  "dataSourceOsm": "Lieux fournis par OpenStreetMap. Ajoutez une clÃ© Google pour utiliser Google Places.",
+  "fallbackData": "DonnÃ©es de secours affichÃ©es temporairement.",
+  "noApiKey": "Ajoutez EXPO_PUBLIC_GOOGLE_PLACES_API_KEY dans un fichier .env (API Places + Maps SDK activÃ©es).",
+  "noResults": "Aucun lieu trouvÃ© Ã  proximitÃ©.",
+  "apiError": "Ã‰chec de la recherche de lieux.",
   "categories": {
     "all": "Tout",
     "restaurant": "Restaurants",
-    "hotel": "Hôtels",
+    "hotel": "HÃ´tels",
     "shop": "Magasins",
     "travel": "Excursions",
-    "grocery": "Épiceries",
+    "grocery": "Ã‰piceries",
     "bakery": "Boulangeries"
   }
 }
+

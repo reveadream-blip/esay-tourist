@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -37,11 +37,11 @@ export function MapScreen() {
   const [dataSource, setDataSource] = useState<PoiDataSource | null>(null);
 
   const loadPois = useCallback(
-    async (lat: number, lng: number, cat: string) => {
+    async (lat: number, lng: number, cat: string, query: string) => {
       setApiMessage(null);
       setLoadingPois(true);
       try {
-        const { pois, source } = await fetchNearbyPois(lat, lng, cat);
+        const { pois, source } = await fetchNearbyPois(lat, lng, cat, query);
         setDataSource(source);
         setRawPois(pois);
         if (pois.length === 0) {
@@ -100,16 +100,11 @@ export function MapScreen() {
     if (!userCoords) {
       return;
     }
-    loadPois(userCoords.lat, userCoords.lng, category);
-  }, [userCoords, category, loadPois]);
-
-  const filteredPois = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) {
-      return rawPois;
-    }
-    return rawPois.filter((p) => p.name.toLowerCase().includes(q));
-  }, [rawPois, search]);
+    const timer = setTimeout(() => {
+      loadPois(userCoords.lat, userCoords.lng, category, search);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [userCoords, category, search, loadPois]);
 
   const onDirections = async () => {
     if (!selectedPoi) {
@@ -188,7 +183,7 @@ export function MapScreen() {
         {apiMessage && <Text style={styles.apiBanner}>{t(apiMessage)}</Text>}
         <View style={styles.metaRow}>
           <Text style={styles.countText}>
-            {t('resultsCount', { count: filteredPois.length })}
+            {t('resultsCount', { count: rawPois.length })}
           </Text>
           {dataSource ? (
             <View style={styles.sourceBadge}>
@@ -220,7 +215,7 @@ export function MapScreen() {
         <View style={styles.toolbar}>
           {loadingPois ? <ActivityIndicator /> : null}
           <Pressable
-            onPress={() => userCoords && loadPois(userCoords.lat, userCoords.lng, category)}
+            onPress={() => userCoords && loadPois(userCoords.lat, userCoords.lng, category, search)}
             style={styles.refreshBtn}
           >
             <Text style={styles.refreshText}>{t('refresh')}</Text>
@@ -232,7 +227,7 @@ export function MapScreen() {
         <TouristMap
           userLat={userCoords.lat}
           userLng={userCoords.lng}
-          pois={filteredPois}
+          pois={rawPois}
           selectedPoiId={selectedPoi?.id ?? null}
           onSelectPoi={setSelectedPoi}
         />
