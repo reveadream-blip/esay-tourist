@@ -1,0 +1,19 @@
+{
+  "name": "Easy Travel",
+  "short_name": "EasyTravel",
+  "description": "Premium PWA to discover places around your location.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#e0f2fe",
+  "theme_color": "#0f172a",
+  "orientation": "portrait",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
