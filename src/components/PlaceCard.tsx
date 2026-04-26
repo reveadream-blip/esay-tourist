@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Navigation, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -27,11 +28,33 @@ function formatDistance(distanceMeters: number) {
 export function PlaceCard({ place }: Props) {
   const { t } = useTranslation()
   const directionUrl = `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`
+  const staticMapFallback = `https://staticmap.openstreetmap.de/staticmap.php?center=${place.lat},${place.lng}&zoom=16&size=1200x800&markers=${place.lat},${place.lng},red-pushpin`
+  const placeholderFallback = `https://placehold.co/1200x800/e2e8f0/475569?text=${encodeURIComponent(place.name)}`
+  const [imageSrc, setImageSrc] = useState(place.photo)
+
+  useEffect(() => {
+    setImageSrc(place.photo)
+  }, [place.photo])
 
   return (
     <article className="overflow-hidden rounded-3xl border border-white/30 bg-white/60 shadow-xl backdrop-blur-md">
       <div className="relative h-40">
-        <img src={place.photo} alt={place.name} className="h-full w-full object-cover" />
+        <img
+          src={imageSrc}
+          alt={place.name}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => {
+            if (imageSrc !== staticMapFallback) {
+              setImageSrc(staticMapFallback)
+              return
+            }
+            if (imageSrc !== placeholderFallback) {
+              setImageSrc(placeholderFallback)
+            }
+          }}
+        />
         <span className="absolute right-3 top-3 rounded-full bg-black/65 px-3 py-1 text-xs font-semibold text-white">
           {formatDistance(place.distanceMeters)}
         </span>

@@ -9,6 +9,7 @@ import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { CategoryBar, type CategoryId } from './components/CategoryBar'
 import { PlaceCard, type Place } from './components/PlaceCard'
+import { getGooglePlacePhotoUrl, hasGooglePlacesKey } from './services/googlePlaces'
 
 const EARTH_RADIUS_KM = 6371
 const MAX_RADIUS_METERS = 50000
@@ -292,6 +293,47 @@ function App() {
     void loadNearbyPlaces()
     return () => controller.abort()
   }, [position, debouncedSearch])
+
+  useEffect(() => {
+    if (!hasGooglePlacesKey || places.length === 0) return
+
+    const controller = new AbortController()
+    const enrichPhotos = async () => {
+      const subset = places.slice(0, 20)
+      const updates = await Promise.all(
+        subset.map(async (place) => {
+          const cacheKey = `easytravel-google-photo-${place.id}`
+          const cached = sessionStorage.getItem(cacheKey)
+          if (cached) {
+            return { id: place.id, photo: cached }
+          }
+
+          try {
+            const photoUrl = await getGooglePlacePhotoUrl(place.name, place.lat, place.lng)
+            if (!photoUrl) return null
+            sessionStorage.setItem(cacheKey, photoUrl)
+            return { id: place.id, photo: photoUrl }
+          } catch {
+            return null
+          }
+        }),
+      )
+
+      if (controller.signal.aborted) return
+      const updateMap = new Map(updates.filter((item): item is { id: string; photo: string } => Boolean(item)).map((item) => [item.id, item.photo]))
+      if (updateMap.size === 0) return
+
+      setPlaces((currentPlaces) =>
+        currentPlaces.map((place) => {
+          const nextPhoto = updateMap.get(place.id)
+          return nextPhoto ? { ...place, photo: nextPhoto } : place
+        }),
+      )
+    }
+
+    void enrichPhotos()
+    return () => controller.abort()
+  }, [places])
 
   const filteredPlaces = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
