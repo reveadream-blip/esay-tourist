@@ -237,11 +237,7 @@ export function MapScreen() {
               }}
             >
               <Text style={styles.sourceBadgeText}>
-                {dataSource === 'google'
-                  ? 'Google'
-                  : dataSource === 'osm'
-                    ? 'OpenStreetMap'
-                    : t('offlineFallback')}
+                {dataSource === 'osm' ? 'OpenStreetMap' : t('offlineFallback')}
               </Text>
             </Pressable>
           ) : null}

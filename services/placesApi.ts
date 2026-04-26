@@ -1,10 +1,3 @@
-export type GooglePlaceResult = {
-  place_id: string;
-  name: string;
-  vicinity?: string;
-  geometry: { location: { lat: number; lng: number } };
-};
-
 export type Poi = {
   id: string;
   name: string;
@@ -14,32 +7,24 @@ export type Poi = {
   distanceMeters?: number;
 };
 
-/** Maps app categories to Google Places `type` (Nearby Search). */
 export const categoryToPlaceType: Record<string, string> = {
-  all: 'point_of_interest',
+  all: 'all',
   restaurant: 'restaurant',
-  hotel: 'lodging',
-  shop: 'store',
-  travel: 'travel_agency',
-  grocery: 'grocery_or_supermarket',
+  hotel: 'hotel',
+  shop: 'shop',
+  travel: 'travel',
+  grocery: 'grocery',
   bakery: 'bakery',
 };
 
-const NEARBY_URL = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json';
-const CLIENT_FETCH_TIMEOUT_MS = 12000;
-
-function getApiKey(): string {
-  return process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY ?? '';
-}
-
-export function hasPlacesApiKey(): boolean {
-  return getApiKey().length > 0;
-}
+const PHOTON_URL = 'https://photon.komoot.io/api';
+const FETCH_TIMEOUT_MS = 12000;
+const MAX_RADIUS_METERS = 50000;
 
 /** Source utilisée côté UI (affichage discret). */
-export type PoiDataSource = 'google' | 'osm' | 'fallback';
+export type PoiDataSource = 'osm' | 'fallback';
 
-async function fetchWithTimeout(url: string, timeoutMs = CLIENT_FETCH_TIMEOUT_MS): Promise<Response> {
+async function fetchWithTimeout(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -55,30 +40,6 @@ function normalizeLanguageTag(languageTag: string): string {
     return 'en';
   }
   return code.split('-')[0] || 'en';
-}
-
-async function fetchNearbyPoisViaCloudflareProxy(
-  latitude: number,
-  longitude: number,
-  categoryKey: string,
-  searchTerm: string,
-  preferredLanguage: string,
-  radiusMeters: number
-): Promise<Poi[]> {
-  const params = new URLSearchParams({
-    lat: String(latitude),
-    lng: String(longitude),
-    category: categoryKey,
-    q: searchTerm,
-    lang: normalizeLanguageTag(preferredLanguage),
-    radius: String(radiusMeters),
-  });
-  const res = await fetchWithTimeout(`/api/pois?${params.toString()}`);
-  if (!res.ok) {
-    throw new Error(`Proxy HTTP ${res.status}`);
-  }
-  const json = (await res.json()) as { pois?: Poi[] };
-  return json.pois ?? [];
 }
 
 function fallbackPois(
@@ -112,53 +73,92 @@ function fallbackPois(
   }));
 }
 
-async function fetchNearbyPoisGoogle(
+type PhotonFeature = {
+  geometry?: { coordinates?: [number, number] };
+  properties?: {
+    osm_id?: number | string;
+    osm_type?: string;
+    name?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    street?: string;
+    housenumber?: string;
+    osm_key?: string;
+    osm_value?: string;
+  };
+};
+
+function haversineMeters(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const R = 6371000;
+  const dLat = toRad(toLat - fromLat);
+  const dLng = toRad(toLng - fromLng);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(fromLat)) * Math.cos(toRad(toLat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return Math.round(R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))));
+}
+
+function categoryKeywords(categoryKey: string): string[] {
+  switch (categoryKey) {
+    case 'restaurant':
+      return ['restaurant', 'food'];
+    case 'hotel':
+      return ['hotel', 'resort'];
+    case 'shop':
+      return ['shopping', 'store'];
+    case 'travel':
+      return ['tour', 'attraction'];
+    case 'grocery':
+      return ['supermarket', 'grocery'];
+    case 'bakery':
+      return ['bakery', 'bread'];
+    case 'all':
+    default:
+      return ['restaurant', 'hotel', 'shopping', 'attraction'];
+  }
+}
+
+async function searchPhoton(
+  query: string,
   latitude: number,
   longitude: number,
-  categoryKey: string,
-  searchTerm: string,
-  preferredLanguage: string,
-  radiusMeters: number
+  lang: string,
+  limit = 60
 ): Promise<Poi[]> {
-  const key = getApiKey();
-  if (!key) {
-    return [];
-  }
-
-  const type = categoryToPlaceType[categoryKey] ?? 'point_of_interest';
   const params = new URLSearchParams({
-    location: `${latitude},${longitude}`,
-    radius: String(radiusMeters),
-    type,
-    ...(searchTerm.trim() ? { keyword: searchTerm.trim() } : {}),
-    language: normalizeLanguageTag(preferredLanguage),
-    key,
+    q: query,
+    lat: String(latitude),
+    lon: String(longitude),
+    limit: String(limit),
+    lang,
   });
-
-  const res = await fetchWithTimeout(`${NEARBY_URL}?${params.toString()}`);
-  const json = (await res.json()) as {
-    results?: GooglePlaceResult[];
-    status: string;
-    error_message?: string;
-  };
-
-  if (json.status !== 'OK' && json.status !== 'ZERO_RESULTS') {
-    throw new Error(json.error_message ?? json.status);
-  }
-
-  const results = json.results ?? [];
-  return results.map((r) => ({
-    id: r.place_id,
-    name: r.name,
-    latitude: r.geometry.location.lat,
-    longitude: r.geometry.location.lng,
-    address: r.vicinity,
-  }));
+  const res = await fetchWithTimeout(`${PHOTON_URL}?${params.toString()}`);
+  if (!res.ok) return [];
+  const json = (await res.json()) as { features?: PhotonFeature[] };
+  return (json.features ?? [])
+    .map((f) => {
+      const coords = f.geometry?.coordinates;
+      const p = f.properties;
+      if (!coords || coords.length < 2 || !p?.name) return null;
+      const [lon, lat] = coords;
+      const address = [p.street, p.housenumber, p.city || p.state, p.country]
+        .filter(Boolean)
+        .join(', ');
+      return {
+        id: `photon-${p.osm_type ?? 'x'}-${p.osm_id ?? `${lat}-${lon}`}`,
+        name: p.name,
+        latitude: lat,
+        longitude: lon,
+        address: address || undefined,
+      } as Poi;
+    })
+    .filter((x): x is Poi => x != null);
 }
 
 /**
- * Lieux proches : Google Places si `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY` est défini, sinon OpenStreetMap (gratuit).
- * Google : activer Places API + facturation sur Google Cloud.
+ * Lieux proches via OpenStreetMap Photon (gratuit, sans clé).
  * @param radiusMeters default 50000 (50 km)
  */
 export async function fetchNearbyPois(
@@ -169,58 +169,41 @@ export async function fetchNearbyPois(
   preferredLanguage = 'en',
   radiusMeters = 50000
 ): Promise<{ pois: Poi[]; source: PoiDataSource }> {
-  if (getApiKey()) {
-    const pois = await fetchNearbyPoisGoogle(
-      latitude,
-      longitude,
-      categoryKey,
-      searchTerm,
-      preferredLanguage,
-      radiusMeters
-    );
-    return { pois, source: 'google' };
-  }
+  const lang = normalizeLanguageTag(preferredLanguage);
+  const safeRadius = Math.min(Math.max(radiusMeters, 200), MAX_RADIUS_METERS);
+  const queries =
+    searchTerm.trim().length > 0 ? [searchTerm.trim()] : categoryKeywords(categoryKey);
 
-  let pois: Poi[] = [];
   try {
-    // Prefer server-side proxy on web/mobile browsers: avoids CORS/rate-limit issues seen client-side.
-    pois = await fetchNearbyPoisViaCloudflareProxy(
-      latitude,
-      longitude,
-      categoryKey,
-      searchTerm,
-      preferredLanguage,
-      radiusMeters
+    const chunks = await Promise.all(
+      queries.map((q) => searchPhoton(q, latitude, longitude, lang, searchTerm.trim() ? 120 : 80))
     );
-    if (pois.length === 0) {
-      const { fetchNearbyPoisOsm } = await import('./placesOsm');
-      pois = await fetchNearbyPoisOsm(
-        latitude,
-        longitude,
-        categoryKey,
-        searchTerm,
-        preferredLanguage,
-        radiusMeters
-      );
+    const merged = chunks.flat();
+    const seen = new Set<string>();
+    const filtered = merged
+      .map((poi) => ({
+        ...poi,
+        distanceMeters: haversineMeters(latitude, longitude, poi.latitude, poi.longitude),
+      }))
+      .filter((poi) => poi.distanceMeters <= safeRadius)
+      .filter((poi) => {
+        const key = `${poi.latitude.toFixed(5)}_${poi.longitude.toFixed(5)}_${poi.name.toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => (a.distanceMeters ?? 0) - (b.distanceMeters ?? 0))
+      .slice(0, 300);
+
+    if (filtered.length > 0) {
+      return { pois: filtered, source: 'osm' };
     }
   } catch {
-    // Last client-side attempt before synthetic fallback.
-    try {
-      const { fetchNearbyPoisOsm } = await import('./placesOsm');
-      pois = await fetchNearbyPoisOsm(
-        latitude,
-        longitude,
-        categoryKey,
-        searchTerm,
-        preferredLanguage,
-        radiusMeters
-      );
-    } catch {
-      return {
-        pois: fallbackPois(latitude, longitude, categoryKey, searchTerm),
-        source: 'fallback',
-      };
-    }
+    // fallback below
   }
-  return { pois, source: 'osm' };
+
+  return {
+    pois: fallbackPois(latitude, longitude, categoryKey, searchTerm),
+    source: 'fallback',
+  };
 }
