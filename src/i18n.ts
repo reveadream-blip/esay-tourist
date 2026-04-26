@@ -5,6 +5,13 @@ import { initReactI18next } from 'react-i18next'
 i18n.use(LanguageDetector).use(initReactI18next).init({
   supportedLngs: ['en', 'fr'],
   fallbackLng: 'en',
+  load: 'languageOnly',
+  nonExplicitSupportedLngs: true,
+  detection: {
+    order: ['querystring', 'localStorage', 'navigator', 'htmlTag'],
+    caches: ['localStorage'],
+    convertDetectedLanguage: (lng) => lng.split('-')[0].toLowerCase(),
+  },
   interpolation: { escapeValue: false },
   resources: {
     en: {
