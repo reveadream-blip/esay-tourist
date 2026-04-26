@@ -11,7 +11,7 @@
     "refresh":  "Actualizar",
     "route":  "Ruta",
     "openMapsError":  "No se pudo abrir la app de mapas.",
-    "dataSourceOsm":  "Lugares de OpenStreetMap. Añade una clave de Google para usar Google Places.",
+    "dataSourceOsm":  "Fuente de lugares: OpenStreetMap",
     "fallbackData":  "Se muestran lugares temporales de respaldo.",
     "noApiKey":  "Añade EXPO_PUBLIC_GOOGLE_PLACES_API_KEY en un archivo .env (Places + Maps SDK activadas).",
     "noResults":  "No se encontraron lugares cerca.",

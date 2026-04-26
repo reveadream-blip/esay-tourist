@@ -11,7 +11,7 @@
     "refresh":  "Actualiser",
     "route":  "Itinéraire",
     "openMapsError":  "Impossible d\u0027ouvrir l\u0027application de cartes.",
-    "dataSourceOsm":  "Lieux fournis par OpenStreetMap. Ajoutez une clé Google pour utiliser Google Places.",
+    "dataSourceOsm":  "Source des lieux : OpenStreetMap",
     "fallbackData":  "Données de secours affichées temporairement.",
     "noApiKey":  "Ajoutez EXPO_PUBLIC_GOOGLE_PLACES_API_KEY dans un fichier .env (API Places + Maps SDK activées).",
     "noResults":  "Aucun lieu trouvé à proximité.",
