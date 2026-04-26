@@ -111,6 +111,7 @@ export function MapScreen() {
   const requestUserLocation = useCallback(async (): Promise<{ lat: number; lng: number } | null> => {
     setLoadingLocation(true);
     setLocationError(null);
+    setPermissionDenied(false);
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       setPermissionDenied(true);
@@ -175,28 +176,6 @@ export function MapScreen() {
     );
   }
 
-  if (permissionDenied) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.message}>{t('locationDenied')}</Text>
-        <Pressable onPress={() => Linking.openSettings()} style={styles.settingsBtn}>
-          <Text style={styles.settingsBtnText}>{t('openSettings')}</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (locationError || !userCoords) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.message}>{t('locationError')}</Text>
-        <Pressable onPress={requestUserLocation} style={styles.permissionBtn}>
-          <Text style={styles.permissionBtnText}>{t('retry')}</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.root}>
       <View style={styles.chrome}>
@@ -206,6 +185,8 @@ export function MapScreen() {
           {locationAccuracy != null && locationAccuracy > 3000 ? (
             <Text style={styles.accuracyWarning}>{t('locationApproximate')}</Text>
           ) : null}
+          {permissionDenied ? <Text style={styles.accuracyWarning}>{t('locationDenied')}</Text> : null}
+          {locationError ? <Text style={styles.accuracyWarning}>{t('locationError')}</Text> : null}
         </View>
         <TextInput
           value={search}
@@ -248,7 +229,7 @@ export function MapScreen() {
             <Pressable
               style={styles.sourceBadge}
               onPress={() => {
-                if (dataSource !== 'osm') {
+                if (dataSource !== 'osm' || !userCoords) {
                   return;
                 }
                 const url = `https://www.openstreetmap.org/?mlat=${userCoords.lat}&mlon=${userCoords.lng}#map=12/${userCoords.lat}/${userCoords.lng}`;
@@ -310,13 +291,25 @@ export function MapScreen() {
       </View>
 
       <View style={styles.mapWrap}>
-        <TouristMap
-          userLat={userCoords.lat}
-          userLng={userCoords.lng}
-          pois={rawPois}
-          selectedPoiId={selectedPoi?.id ?? null}
-          onSelectPoi={setSelectedPoi}
-        />
+        {userCoords ? (
+          <TouristMap
+            userLat={userCoords.lat}
+            userLng={userCoords.lng}
+            pois={rawPois}
+            selectedPoiId={selectedPoi?.id ?? null}
+            onSelectPoi={setSelectedPoi}
+          />
+        ) : (
+          <View style={styles.centeredMapState}>
+            <Text style={styles.message}>{t('locationPrompt')}</Text>
+            <Pressable onPress={requestUserLocation} style={styles.permissionBtn}>
+              <Text style={styles.permissionBtnText}>{t('retry')}</Text>
+            </Pressable>
+            <Pressable onPress={() => Linking.openSettings()} style={styles.settingsBtn}>
+              <Text style={styles.settingsBtnText}>{t('openSettings')}</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -325,6 +318,13 @@ export function MapScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#020617' },
   mapWrap: { flex: 1 },
+  centeredMapState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: '#020617',
+  },
   chrome: {
     paddingTop: 52,
     paddingHorizontal: 14,
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
   refreshText: { color: '#38bdf8', fontWeight: '700' },
   apiBanner: { color: '#fbbf24', fontSize: 12, marginTop: 4, marginBottom: 2 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  message: { textAlign: 'center', color: '#0f172a', fontSize: 16 },
+  message: { textAlign: 'center', color: '#e2e8f0', fontSize: 16 },
   muted: { marginTop: 8, color: '#64748b' },
   permissionBtn: {
     marginTop: 14,
