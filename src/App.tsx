@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import L from 'leaflet'
-import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet'
+import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 import { useTranslation } from 'react-i18next'
 import { Search } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
@@ -13,7 +13,8 @@ import { PlaceCard, type Place } from './components/PlaceCard'
 const EARTH_RADIUS_KM = 6371
 const MAX_RADIUS_METERS = 50000
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
-const OVERPASS_RESULT_LIMIT = 20000
+const FAST_RADIUS_METERS = 8000
+const OVERPASS_RESULT_LIMIT = 12000
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
@@ -104,23 +105,61 @@ const getStableRating = (rawId: string): number => {
   return 3.8 + (seed % 12) / 10
 }
 
+const toWikimediaFileUrl = (commonsFileName: string) => {
+  const normalized = commonsFileName.startsWith('File:')
+    ? commonsFileName.slice(5)
+    : commonsFileName
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(normalized)}`
+}
+
+const getPlacePhotoUrl = (tags: Record<string, string>, lat: number, lng: number) => {
+  const directImage = tags.image ?? tags['image:0']
+  if (directImage && /^https?:\/\//i.test(directImage)) {
+    return directImage
+  }
+
+  const wikimediaCommons = tags.wikimedia_commons
+  if (wikimediaCommons) {
+    return toWikimediaFileUrl(wikimediaCommons)
+  }
+
+  // Fallback to a static map centered on the exact place location.
+  return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=16&size=1200x800&markers=${lat},${lng},red-pushpin`
+}
+
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-const buildOverpassQuery = (lat: number, lng: number, searchTerm = ''): string => {
+const buildOverpassQuery = (lat: number, lng: number, radiusMeters: number, searchTerm = ''): string => {
   const normalizedSearch = searchTerm.trim()
   const nameFilter = normalizedSearch ? `["name"~"${escapeRegex(normalizedSearch)}",i]` : ''
 
   return `
 [out:json][timeout:40];
 (
-  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[amenity~"restaurant|cafe|fast_food|food_court|bar|pub|biergarten|nightclub|spa|marketplace|travel_agency|car_rental|bicycle_rental|motorcycle_rental|vehicle_rental|boat_rental"]${nameFilter};
-  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[tourism~"hotel|motel|hostel|guest_house|apartment|attraction|museum|artwork|viewpoint|theme_park|zoo|aquarium|gallery"]${nameFilter};
-  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[historic~"monument|memorial|ruins|castle|archaeological_site"]${nameFilter};
-  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[leisure~"park|playground|sports_centre|fitness_centre|water_park|marina|spa"]${nameFilter};
-  nwr(around:${MAX_RADIUS_METERS},${lat},${lng})[shop~"mall|car_rental|massage"]${nameFilter};
+  nwr(around:${radiusMeters},${lat},${lng})[amenity~"restaurant|cafe|fast_food|food_court|bar|pub|biergarten|nightclub|spa|marketplace|travel_agency|car_rental|bicycle_rental|motorcycle_rental|vehicle_rental|boat_rental"]${nameFilter};
+  nwr(around:${radiusMeters},${lat},${lng})[tourism~"hotel|motel|hostel|guest_house|apartment|attraction|museum|artwork|viewpoint|theme_park|zoo|aquarium|gallery"]${nameFilter};
+  nwr(around:${radiusMeters},${lat},${lng})[historic~"monument|memorial|ruins|castle|archaeological_site"]${nameFilter};
+  nwr(around:${radiusMeters},${lat},${lng})[leisure~"park|playground|sports_centre|fitness_centre|water_park|marina|spa"]${nameFilter};
+  nwr(around:${radiusMeters},${lat},${lng})[shop~"mall|car_rental|massage"]${nameFilter};
 );
 out center ${OVERPASS_RESULT_LIMIT};
 `
+}
+
+type SearchMapFocusProps = {
+  place: Place | null
+  hasActiveSearch: boolean
+}
+
+function SearchMapFocus({ place, hasActiveSearch }: SearchMapFocusProps) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!hasActiveSearch || !place) return
+    map.flyTo([place.lat, place.lng], 16, { duration: 0.8 })
+  }, [map, place, hasActiveSearch])
+
+  return null
 }
 
 function App() {
@@ -162,59 +201,89 @@ function App() {
     if (!position) return
 
     const controller = new AbortController()
+    const cacheKeyBase = `${position.lat.toFixed(3)}-${position.lng.toFixed(3)}-${debouncedSearch.trim().toLowerCase()}`
+
+    const parsePlaces = (data: OsmResponse): Place[] =>
+      data.elements
+        .reduce<Place[]>((acc, element) => {
+          const lat = element.lat ?? element.center?.lat
+          const lng = element.lon ?? element.center?.lon
+          if (lat === undefined || lng === undefined) return acc
+
+          const tags = element.tags ?? {}
+          const name = tags.name ?? tags['name:en'] ?? tags.brand
+          if (!name) return acc
+
+          const distanceMeters = haversine(position.lat, position.lng, lat, lng)
+          if (distanceMeters > MAX_RADIUS_METERS) return acc
+
+          const id = `${element.type}-${element.id}`
+          const categoryId = inferCategory(tags)
+          const stars = Number(tags.stars)
+          const rating = Number.isFinite(stars) && stars > 0 ? Math.min(5, stars) : getStableRating(id)
+
+          acc.push({
+            id,
+            category: categoryId,
+            name,
+            photo: getPlacePhotoUrl(tags, lat, lng),
+            lat,
+            lng,
+            rating,
+            distanceMeters,
+          })
+          return acc
+        }, [])
+        .filter((place, index, array) => array.findIndex((item) => item.id === place.id) === index)
+
+    const fetchAndParse = async (radiusMeters: number) => {
+      const response = await fetch(OVERPASS_URL, {
+        method: 'POST',
+        body: buildOverpassQuery(position.lat, position.lng, radiusMeters, debouncedSearch),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Overpass failed: ${response.status}`)
+      }
+
+      const data = (await response.json()) as OsmResponse
+      return parsePlaces(data)
+    }
+
     const loadNearbyPlaces = async () => {
       setIsLoading(true)
       try {
-        const response = await fetch(OVERPASS_URL, {
-          method: 'POST',
-          body: buildOverpassQuery(position.lat, position.lng, debouncedSearch),
-          signal: controller.signal,
-        })
-
-        if (!response.ok) {
-          throw new Error(`Overpass failed: ${response.status}`)
+        const cachedFast = sessionStorage.getItem(`easytravel-fast-${cacheKeyBase}`)
+        if (cachedFast) {
+          setPlaces(JSON.parse(cachedFast) as Place[])
+          setIsLoading(false)
         }
 
-        const data = (await response.json()) as OsmResponse
-        const parsedPlaces = data.elements
-          .reduce<Place[]>((acc, element) => {
-            const lat = element.lat ?? element.center?.lat
-            const lng = element.lon ?? element.center?.lon
-            if (lat === undefined || lng === undefined) return acc
+        // Step 1: quick nearby results for fast map rendering.
+        const fastPlaces = await fetchAndParse(FAST_RADIUS_METERS)
+        if (!controller.signal.aborted) {
+          setPlaces(fastPlaces)
+          setIsLoading(false)
+          sessionStorage.setItem(`easytravel-fast-${cacheKeyBase}`, JSON.stringify(fastPlaces))
+        }
 
-            const tags = element.tags ?? {}
-            const name = tags.name ?? tags['name:en'] ?? tags.brand
-            if (!name) return acc
+        // Step 2: full 50km enrichment in background.
+        const fullCacheKey = `easytravel-full-${cacheKeyBase}`
+        const cachedFull = sessionStorage.getItem(fullCacheKey)
+        if (cachedFull && !controller.signal.aborted) {
+          setPlaces(JSON.parse(cachedFull) as Place[])
+          return
+        }
 
-            const distanceMeters = haversine(position.lat, position.lng, lat, lng)
-            if (distanceMeters > MAX_RADIUS_METERS) return acc
-
-            const id = `${element.type}-${element.id}`
-            const categoryId = inferCategory(tags)
-            const stars = Number(tags.stars)
-            const rating = Number.isFinite(stars) && stars > 0 ? Math.min(5, stars) : getStableRating(id)
-
-            acc.push({
-              id,
-              category: categoryId,
-              name,
-              photo: `https://picsum.photos/seed/${encodeURIComponent(id)}/1200/800`,
-              lat,
-              lng,
-              rating,
-              distanceMeters,
-            })
-            return acc
-          }, [])
-          .filter((place, index, array) => array.findIndex((item) => item.id === place.id) === index)
-
-        setPlaces(parsedPlaces)
+        const fullPlaces = await fetchAndParse(MAX_RADIUS_METERS)
+        if (!controller.signal.aborted) {
+          setPlaces(fullPlaces)
+          sessionStorage.setItem(fullCacheKey, JSON.stringify(fullPlaces))
+        }
       } catch (error) {
         if (!controller.signal.aborted) {
           setPlaces([])
-        }
-      } finally {
-        if (!controller.signal.aborted) {
           setIsLoading(false)
         }
       }
@@ -233,6 +302,12 @@ function App() {
       .filter((place) => (normalizedQuery ? place.name.toLowerCase().includes(normalizedQuery) : true))
       .sort((a, b) => a.distanceMeters - b.distanceMeters)
   }, [places, category, searchQuery])
+
+  const hasActiveSearch = searchQuery.trim().length > 0
+  const focusedPlace = hasActiveSearch && filteredPlaces.length > 0 ? filteredPlaces[0] : null
+  const listPlaces = hasActiveSearch && focusedPlace
+    ? filteredPlaces.filter((place) => place.id !== focusedPlace.id)
+    : filteredPlaces
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-100 via-white to-indigo-100 px-4 py-5 text-slate-800">
@@ -266,6 +341,7 @@ function App() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution="&copy; OpenStreetMap contributors"
               />
+              <SearchMapFocus place={focusedPlace} hasActiveSearch={hasActiveSearch} />
               <Marker position={[position.lat, position.lng]}>
                 <Popup>{t('yourPosition')}</Popup>
               </Marker>
@@ -275,6 +351,15 @@ function App() {
                 </Marker>
               ))}
             </MapContainer>
+          </section>
+        )}
+
+        {focusedPlace && (
+          <section className="space-y-2">
+            <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              {t('searchResultCard')}
+            </p>
+            <PlaceCard place={focusedPlace} />
           </section>
         )}
 
@@ -307,9 +392,9 @@ function App() {
           </div>
         )}
 
-        {!isLoading && filteredPlaces.length > 0 && (
+        {!isLoading && listPlaces.length > 0 && (
           <section className="space-y-3 pb-4">
-            {filteredPlaces.map((place) => (
+            {listPlaces.map((place) => (
               <PlaceCard key={place.id} place={place} />
             ))}
           </section>

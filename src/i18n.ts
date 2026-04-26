@@ -19,6 +19,7 @@ i18n.use(LanguageDetector).use(initReactI18next).init({
         yourPosition: 'Your position',
         searchPlaceholder: 'Search a place, hotel, restaurant...',
         radiusLabel: 'Showing places from 0 m to 50 km around you',
+        searchResultCard: 'Top search result',
         categories: {
           all: 'All',
           hotels: 'Hotels',
@@ -44,6 +45,7 @@ i18n.use(LanguageDetector).use(initReactI18next).init({
         yourPosition: 'Votre position',
         searchPlaceholder: 'Rechercher un lieu, hotel, resto...',
         radiusLabel: 'Lieux affiches de 0 m a 50 km autour de vous',
+        searchResultCard: 'Resultat principal',
         categories: {
           all: 'Toutes',
           hotels: 'Hotels',
