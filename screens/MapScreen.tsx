@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -62,6 +63,28 @@ export function MapScreen() {
   const [apiMessage, setApiMessage] = useState<string | null>(null);
   const [dataSource, setDataSource] = useState<PoiDataSource | null>(null);
 
+  const requestUserLocation = useCallback(async () => {
+    setLoadingLocation(true);
+    setLocationError(null);
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      setPermissionDenied(true);
+      setLoadingLocation(false);
+      return;
+    }
+    setPermissionDenied(false);
+    try {
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    } catch {
+      setLocationError('locationError');
+    } finally {
+      setLoadingLocation(false);
+    }
+  }, []);
+
   const loadPois = useCallback(
     async (
       lat: number,
@@ -107,39 +130,8 @@ export function MapScreen() {
   );
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoadingLocation(true);
-      setLocationError(null);
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        if (!cancelled) {
-          setPermissionDenied(true);
-          setLoadingLocation(false);
-        }
-        return;
-      }
-      try {
-        const pos = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        if (!cancelled) {
-          setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        }
-      } catch {
-        if (!cancelled) {
-          setLocationError('locationError');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingLocation(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    requestUserLocation();
+  }, [requestUserLocation]);
 
   useEffect(() => {
     if (!userCoords) {
@@ -174,6 +166,12 @@ export function MapScreen() {
     return (
       <View style={styles.centered}>
         <Text style={styles.message}>{t('locationDenied')}</Text>
+        <Pressable onPress={requestUserLocation} style={styles.permissionBtn}>
+          <Text style={styles.permissionBtnText}>{t('enableLocation')}</Text>
+        </Pressable>
+        <Pressable onPress={() => Linking.openSettings()} style={styles.settingsBtn}>
+          <Text style={styles.settingsBtnText}>{t('openSettings')}</Text>
+        </Pressable>
       </View>
     );
   }
@@ -182,6 +180,9 @@ export function MapScreen() {
     return (
       <View style={styles.centered}>
         <Text style={styles.message}>{t('locationError')}</Text>
+        <Pressable onPress={requestUserLocation} style={styles.permissionBtn}>
+          <Text style={styles.permissionBtnText}>{t('retry')}</Text>
+        </Pressable>
       </View>
     );
   }
@@ -395,4 +396,18 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   message: { textAlign: 'center', color: '#0f172a', fontSize: 16 },
   muted: { marginTop: 8, color: '#64748b' },
+  permissionBtn: {
+    marginTop: 14,
+    backgroundColor: '#38bdf8',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  permissionBtnText: { color: '#0c4a6e', fontWeight: '800' },
+  settingsBtn: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  settingsBtnText: { color: '#0ea5e9', fontWeight: '700' },
 });
