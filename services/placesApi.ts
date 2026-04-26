@@ -34,6 +34,30 @@ async function fetchWithTimeout(url: string, timeoutMs = FETCH_TIMEOUT_MS): Prom
   }
 }
 
+async function fetchProxyPois(
+  latitude: number,
+  longitude: number,
+  categoryKey: string,
+  searchTerm: string,
+  preferredLanguage: string,
+  radiusMeters: number
+): Promise<Poi[]> {
+  const params = new URLSearchParams({
+    lat: String(latitude),
+    lng: String(longitude),
+    category: categoryKey,
+    q: searchTerm,
+    lang: normalizeLanguageTag(preferredLanguage),
+    radius: String(radiusMeters),
+  });
+  const res = await fetchWithTimeout(`/api/pois?${params.toString()}`);
+  if (!res.ok) {
+    return [];
+  }
+  const json = (await res.json()) as { pois?: Poi[] };
+  return json.pois ?? [];
+}
+
 function normalizeLanguageTag(languageTag: string): string {
   const code = languageTag.trim().toLowerCase();
   if (!code) {
@@ -157,6 +181,18 @@ async function searchPhoton(
     .filter((x): x is Poi => x != null);
 }
 
+function dedupePois(pois: Poi[]): Poi[] {
+  const seen = new Set<string>();
+  const out: Poi[] = [];
+  for (const p of pois) {
+    const key = `${p.latitude.toFixed(5)}_${p.longitude.toFixed(5)}_${p.name.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
 /**
  * Lieux proches via OpenStreetMap Photon (gratuit, sans clé).
  * @param radiusMeters default 50000 (50 km)
@@ -175,10 +211,25 @@ export async function fetchNearbyPois(
     searchTerm.trim().length > 0 ? [searchTerm.trim()] : categoryKeywords(categoryKey);
 
   try {
-    const chunks = await Promise.all(
-      queries.map((q) => searchPhoton(q, latitude, longitude, lang, searchTerm.trim() ? 120 : 80))
-    );
-    const merged = chunks.flat();
+    const hasSearch = searchTerm.trim().length > 0;
+    const [proxyPois, photonChunks] = await Promise.all([
+      // For category tabs (empty search), prefer dense nearby POI search from Overpass proxy.
+      fetchProxyPois(
+        latitude,
+        longitude,
+        categoryKey,
+        searchTerm.trim(),
+        lang,
+        safeRadius
+      ),
+      Promise.all(
+        queries.map((q) =>
+          searchPhoton(q, latitude, longitude, lang, hasSearch ? 120 : 80)
+        )
+      ),
+    ]);
+
+    const merged = dedupePois([...proxyPois, ...photonChunks.flat()]);
     const seen = new Set<string>();
     const filtered = merged
       .map((poi) => ({
