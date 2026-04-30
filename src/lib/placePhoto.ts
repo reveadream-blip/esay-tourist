@@ -1,4 +1,9 @@
 import type { CategoryId } from '../components/CategoryBar'
+import {
+  getKartaViewPhotoUrl,
+  getMapillaryThumbnailUrl,
+  getPexelsCategoryPhoto,
+} from './streetImagery'
 
 /** https://meta.wikimedia.org/wiki/User-Agent_policy */
 export const WIKIMEDIA_USER_AGENT =
@@ -50,6 +55,23 @@ const CATEGORY_COMMONS_KEYWORD: Record<Exclude<CategoryId, 'all'>, string> = {
 export function categoryToCommonsKeyword(category: string): string {
   if (category === 'all') return 'travel destination'
   return CATEGORY_COMMONS_KEYWORD[category as Exclude<CategoryId, 'all'>] ?? 'city street'
+}
+
+/** Mots-clés courts pour Unsplash / Pexels (photos de stock par thème). */
+export function categoryToStockKeyword(category: string): string {
+  const m: Record<string, string> = {
+    hotels: 'hotel building',
+    restos: 'restaurant',
+    bars: 'bar pub',
+    markets: 'food market',
+    agencies: 'travel office',
+    nightlife: 'nightclub',
+    spa: 'spa interior',
+    activities: 'leisure park',
+    monuments: 'historic landmark',
+    rentals: 'car rental',
+  }
+  return m[category] ?? 'travel destination'
 }
 
 export function getCategorySvgDataUrl(category: string): string {
@@ -315,12 +337,23 @@ export async function resolveEnrichedPhoto(input: PhotoEnrichmentInput): Promise
     if (fromWiki) return fromWiki
   }
 
-  const keyword = categoryToCommonsKeyword(input.category)
-  const fromUnsplash = await getUnsplashCategoryPhoto(keyword)
+  const fromKarta = await getKartaViewPhotoUrl(input.lat, input.lng)
+  if (fromKarta) return fromKarta
+
+  const mapillaryToken = import.meta.env.VITE_MAPILLARY_ACCESS_TOKEN
+  const fromMly = await getMapillaryThumbnailUrl(input.lat, input.lng, mapillaryToken)
+  if (fromMly) return fromMly
+
+  const stockKw = categoryToStockKeyword(input.category)
+  const fromUnsplash = await getUnsplashCategoryPhoto(stockKw)
   if (fromUnsplash) return fromUnsplash
 
+  const fromPexels = await getPexelsCategoryPhoto(stockKw)
+  if (fromPexels) return fromPexels
+
+  const commonsKw = categoryToCommonsKeyword(input.category)
   const fromNearby = await getCommonsNearbyImageUrl(input.lat, input.lng)
   if (fromNearby) return fromNearby
 
-  return getCommonsSearchImageUrl(keyword)
+  return getCommonsSearchImageUrl(commonsKw)
 }
