@@ -27,6 +27,7 @@ import {
   resolveEnrichedPhoto,
 } from './lib/placePhoto'
 import { getStableEstimatedRating, inferCategory } from './lib/placesLogic'
+import { safeSessionGet, safeSessionSet } from './lib/safeSession'
 import { getSearchRelevanceScore } from './lib/searchRelevance'
 
 L.Icon.Default.mergeOptions({
@@ -193,7 +194,7 @@ function App() {
     const loadNearbyPlaces = async () => {
       setIsLoading(true)
       try {
-        const cachedFast = sessionStorage.getItem(`easytravel5-fast-${cacheKeyBase}`)
+        const cachedFast = safeSessionGet(`easytravel6-fast-${cacheKeyBase}`)
         if (cachedFast) {
           setPlaces(JSON.parse(cachedFast) as Place[])
           setIsLoading(false)
@@ -203,11 +204,11 @@ function App() {
         if (!controller.signal.aborted) {
           setPlaces(fastPlaces)
           setIsLoading(false)
-          sessionStorage.setItem(`easytravel5-fast-${cacheKeyBase}`, JSON.stringify(fastPlaces))
+          safeSessionSet(`easytravel6-fast-${cacheKeyBase}`, JSON.stringify(fastPlaces))
         }
 
-        const fullCacheKey = `easytravel5-full-${cacheKeyBase}`
-        const cachedFull = sessionStorage.getItem(fullCacheKey)
+        const fullCacheKey = `easytravel6-full-${cacheKeyBase}`
+        const cachedFull = safeSessionGet(fullCacheKey)
         if (cachedFull && !controller.signal.aborted) {
           setPlaces(JSON.parse(cachedFull) as Place[])
           return
@@ -216,7 +217,7 @@ function App() {
         const fullPlaces = await fetchAndParse(MAX_RADIUS_METERS)
         if (!controller.signal.aborted) {
           setPlaces(fullPlaces)
-          sessionStorage.setItem(fullCacheKey, JSON.stringify(fullPlaces))
+          safeSessionSet(fullCacheKey, JSON.stringify(fullPlaces))
         }
       } catch {
         if (!controller.signal.aborted) {

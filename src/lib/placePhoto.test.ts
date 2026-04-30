@@ -7,6 +7,7 @@ import {
   getPendingPhotoDataUrl,
   hasResolvedPlacePhoto,
   isPhotoPlaceholder,
+  sanitizePlaceNameForImageSearch,
 } from './placePhoto'
 
 describe('extractWikidataId', () => {
@@ -37,6 +38,13 @@ describe('extractWikipediaTag', () => {
     expect(
       extractWikipediaTag({ 'wikipedia:en': 'en:Notre-Dame de Paris', name: 'x' }),
     ).toBe('en:Notre-Dame de Paris')
+  })
+})
+
+describe('sanitizePlaceNameForImageSearch', () => {
+  it('keeps letters with accents and strips noisy ascii', () => {
+    expect(sanitizePlaceNameForImageSearch('Café  L’été')).toMatch(/Café.*été/)
+    expect(sanitizePlaceNameForImageSearch('foo@bar')).toBe('foo bar')
   })
 })
 

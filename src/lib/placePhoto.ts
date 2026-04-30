@@ -134,12 +134,23 @@ export function getNoPhotoDataUrl(): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
+/**
+ * Sans `\p{Letter}` (certains WebViews / Safari anciens plantent le parsing du bundle).
+ */
 export function sanitizePlaceNameForImageSearch(name: string): string {
-  return name
-    .replace(/[^\p{L}\p{N}\s'-]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 96)
+  const mapped = name
+    .split('')
+    .map((ch) => {
+      const cp = ch.codePointAt(0)!
+      if (cp <= 0x1f || cp === 0x7f) return ' '
+      if (cp < 0x80) {
+        if (/[0-9A-Za-z'\s-]/.test(ch)) return ch
+        return ' '
+      }
+      return ch
+    })
+    .join('')
+  return mapped.replace(/\s+/g, ' ').trim().slice(0, 96)
 }
 
 function parseWikipediaTag(wikipediaTag: string): { lang: string; title: string } | null {
