@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigation, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getCategorySvgDataUrl } from '../lib/placePhoto'
 
 export type RatingSource = 'osm' | 'estimated'
 
@@ -34,39 +33,57 @@ function formatDistance(distanceMeters: number) {
 export function PlaceCard({ place }: Props) {
   const { t } = useTranslation()
   const directionUrl = `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`
-  const categorySvgFallback = getCategorySvgDataUrl(place.category)
+  const categoryEmoji: Record<string, string> = {
+    hotels: '🏨',
+    restos: '🍽',
+    bars: '🍹',
+    markets: '🛒',
+    agencies: '✈',
+    nightlife: '🎵',
+    spa: '💆',
+    activities: '🎯',
+    monuments: '🏛',
+    rentals: '🚗',
+  }
+  const emoji = categoryEmoji[place.category] ?? '📍'
 
-  const imageFallbackChain = useMemo(
-    () =>
-      [place.photo, categorySvgFallback].filter((url, index, array) => array.indexOf(url) === index),
-    [place.photo, categorySvgFallback],
-  )
+  const imageFallbackChain = useMemo(() => [place.photo], [place.photo])
 
   const [imageSrc, setImageSrc] = useState(place.photo)
+  const [showVisualFallback, setShowVisualFallback] = useState(false)
   const chainIndexRef = useRef(0)
 
   useEffect(() => {
     chainIndexRef.current = 0
     setImageSrc(place.photo)
+    setShowVisualFallback(false)
   }, [place.photo])
 
   return (
     <article className="overflow-hidden rounded-3xl border border-white/30 bg-white/60 shadow-xl backdrop-blur-md">
       <div className="relative h-40">
-        <img
-          src={imageSrc}
-          alt={place.name}
-          className="h-full w-full object-cover"
-          loading="lazy"
-          onError={() => {
-            chainIndexRef.current += 1
-            const i = chainIndexRef.current
-            if (i < imageFallbackChain.length) {
-              const url = imageFallbackChain[i]
-              if (url) setImageSrc(url)
-            }
-          }}
-        />
+        {showVisualFallback ? (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-200 to-slate-400 text-6xl">
+            <span aria-hidden>{emoji}</span>
+          </div>
+        ) : (
+          <img
+            src={imageSrc}
+            alt={place.name}
+            className="h-full w-full object-cover"
+            loading="lazy"
+            onError={() => {
+              chainIndexRef.current += 1
+              const i = chainIndexRef.current
+              if (i < imageFallbackChain.length) {
+                const url = imageFallbackChain[i]
+                if (url) setImageSrc(url)
+                return
+              }
+              setShowVisualFallback(true)
+            }}
+          />
+        )}
         <span className="absolute right-3 top-3 rounded-full bg-black/65 px-3 py-1 text-xs font-semibold text-white">
           {formatDistance(place.distanceMeters)}
         </span>
