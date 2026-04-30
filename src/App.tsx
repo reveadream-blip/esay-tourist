@@ -20,7 +20,9 @@ import {
 import {
   extractWikidataId,
   extractWikipediaTag,
+  getNoPhotoDataUrl,
   getPlacePhotoUrl,
+  hasResolvedPlacePhoto,
   isPhotoPlaceholder,
   resolveEnrichedPhoto,
 } from './lib/placePhoto'
@@ -71,6 +73,7 @@ function App() {
   const [places, setPlaces] = useState<Place[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [locationError, setLocationError] = useState(false)
+  const [onlyPlacesWithPhotos, setOnlyPlacesWithPhotos] = useState(true)
   const attemptedPhotoEnrichmentRef = useRef<Set<string>>(new Set())
   const placesRef = useRef<Place[]>([])
   placesRef.current = places
@@ -166,7 +169,7 @@ function App() {
             id,
             category: categoryId,
             name,
-            photo: getPlacePhotoUrl(tags, lat, lng),
+            photo: getPlacePhotoUrl(tags),
             wikipediaTag: extractWikipediaTag(tags),
             wikidataId: extractWikidataId(tags),
             lat,
@@ -190,7 +193,7 @@ function App() {
     const loadNearbyPlaces = async () => {
       setIsLoading(true)
       try {
-        const cachedFast = sessionStorage.getItem(`easytravel4-fast-${cacheKeyBase}`)
+        const cachedFast = sessionStorage.getItem(`easytravel5-fast-${cacheKeyBase}`)
         if (cachedFast) {
           setPlaces(JSON.parse(cachedFast) as Place[])
           setIsLoading(false)
@@ -200,10 +203,10 @@ function App() {
         if (!controller.signal.aborted) {
           setPlaces(fastPlaces)
           setIsLoading(false)
-          sessionStorage.setItem(`easytravel4-fast-${cacheKeyBase}`, JSON.stringify(fastPlaces))
+          sessionStorage.setItem(`easytravel5-fast-${cacheKeyBase}`, JSON.stringify(fastPlaces))
         }
 
-        const fullCacheKey = `easytravel4-full-${cacheKeyBase}`
+        const fullCacheKey = `easytravel5-full-${cacheKeyBase}`
         const cachedFull = sessionStorage.getItem(fullCacheKey)
         if (cachedFull && !controller.signal.aborted) {
           setPlaces(JSON.parse(cachedFull) as Place[])
@@ -257,6 +260,7 @@ function App() {
             try {
               const url = await resolveEnrichedPhoto({
                 placeId: place.id,
+                name: place.name,
                 wikidataId: place.wikidataId,
                 wikipediaTag: place.wikipediaTag,
                 category: place.category,
@@ -266,11 +270,12 @@ function App() {
               if (cancelled) break
               queue.shift()
               attemptedPhotoEnrichmentRef.current.add(place.id)
-              updates.push({ id: place.id, photo: url })
+              updates.push({ id: place.id, photo: url ?? getNoPhotoDataUrl() })
             } catch {
               if (cancelled) break
               queue.shift()
               attemptedPhotoEnrichmentRef.current.add(place.id)
+              updates.push({ id: place.id, photo: getNoPhotoDataUrl() })
             }
           }
         }
@@ -297,7 +302,7 @@ function App() {
     }
   }, [places])
 
-  const filteredPlaces = useMemo(() => {
+  const placesMatchingFilters = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
     const filtered = places
@@ -315,6 +320,11 @@ function App() {
       return a.distanceMeters - b.distanceMeters
     })
   }, [places, category, searchQuery])
+
+  const filteredPlaces = useMemo(() => {
+    if (!onlyPlacesWithPhotos) return placesMatchingFilters
+    return placesMatchingFilters.filter((place) => hasResolvedPlacePhoto(place.photo))
+  }, [placesMatchingFilters, onlyPlacesWithPhotos])
 
   const mapMarkers = useMemo(
     () =>
@@ -366,6 +376,16 @@ function App() {
             />
           </label>
           <p className="mt-2 px-1 text-xs font-medium text-slate-600">{t('radiusLabel')}</p>
+          <label className="mt-3 flex cursor-pointer items-start gap-2.5 px-1 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={onlyPlacesWithPhotos}
+              onChange={(e) => setOnlyPlacesWithPhotos(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-2 focus:ring-slate-400"
+              aria-label={t('onlyPlacesWithPhotos')}
+            />
+            <span>{t('onlyPlacesWithPhotos')}</span>
+          </label>
         </section>
 
         {position && (
@@ -422,7 +442,14 @@ function App() {
 
         {!isLoading && !locationError && filteredPlaces.length === 0 && (
           <div className="rounded-2xl border border-slate-200 bg-white/60 px-4 py-3 text-sm text-slate-700 backdrop-blur-md">
-            {t('noResults')}
+            {placesMatchingFilters.length === 0
+              ? t('noResults')
+              : onlyPlacesWithPhotos &&
+                  placesMatchingFilters.some((p) => isPhotoPlaceholder(p.photo))
+                ? t('photoFilterLoading')
+                : onlyPlacesWithPhotos
+                  ? t('photoFilterExcluded')
+                  : t('noResults')}
           </div>
         )}
 

@@ -26,6 +26,11 @@ i18n.use(LanguageDetector).use(initReactI18next).init({
         yourPosition: 'Your position',
         searchPlaceholder: 'Search a place, hotel, restaurant...',
         radiusLabel: 'Showing places from 0 m to 50 km around you',
+        onlyPlacesWithPhotos: 'Only places with a photo',
+        photoFilterLoading:
+          'Loading or resolving photos… Places without an image yet are hidden. Uncheck the filter to see all.',
+        photoFilterExcluded:
+          'No places with a photo match this search. Try another query or turn off “only places with a photo”.',
         searchResultCard: 'Top search result',
         estimatedRating: 'Indicative',
         estimatedRatingHint: 'This score is an estimate when OpenStreetMap has no official rating.',
@@ -62,6 +67,11 @@ i18n.use(LanguageDetector).use(initReactI18next).init({
         yourPosition: 'Votre position',
         searchPlaceholder: 'Rechercher un lieu, hôtel, restaurant...',
         radiusLabel: 'Lieux affichés de 0 m à 50 km autour de vous',
+        onlyPlacesWithPhotos: 'Lieux avec photo uniquement',
+        photoFilterLoading:
+          'Chargement des photos… Les lieux sans image encore trouvée sont masqués. Décochez pour tout afficher.',
+        photoFilterExcluded:
+          'Aucun lieu avec photo ne correspond à cette recherche. Essayez une autre requête ou désactivez le filtre.',
         searchResultCard: 'Résultat principal',
         estimatedRating: 'Indicatif',
         estimatedRatingHint:

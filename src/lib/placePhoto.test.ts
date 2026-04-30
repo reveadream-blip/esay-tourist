@@ -3,6 +3,9 @@ import {
   categoryToCommonsKeyword,
   extractWikidataId,
   extractWikipediaTag,
+  getNoPhotoDataUrl,
+  getPendingPhotoDataUrl,
+  hasResolvedPlacePhoto,
   isPhotoPlaceholder,
 } from './placePhoto'
 
@@ -44,9 +47,19 @@ describe('categoryToCommonsKeyword', () => {
   })
 })
 
+describe('hasResolvedPlacePhoto', () => {
+  it('accepts remote images and rejects pending / nophoto', () => {
+    expect(hasResolvedPlacePhoto('https://upload.wikimedia.org/foo.jpg')).toBe(true)
+    expect(hasResolvedPlacePhoto(getPendingPhotoDataUrl())).toBe(false)
+    expect(hasResolvedPlacePhoto(getNoPhotoDataUrl())).toBe(false)
+    expect(hasResolvedPlacePhoto('https://tile.openstreetmap.org/16/1/2.png')).toBe(false)
+  })
+})
+
 describe('isPhotoPlaceholder', () => {
-  it('detects svg, static map, osm tile, and not real photos', () => {
-    expect(isPhotoPlaceholder('data:image/svg+xml;charset=utf-8,%3Csvg')).toBe(true)
+  it('treats pending and legacy map URLs as needing enrichment, not nophoto', () => {
+    expect(isPhotoPlaceholder(getPendingPhotoDataUrl())).toBe(true)
+    expect(isPhotoPlaceholder(getNoPhotoDataUrl())).toBe(false)
     expect(isPhotoPlaceholder('https://staticmap.openstreetmap.de/staticmap.php?x=1')).toBe(true)
     expect(isPhotoPlaceholder('https://tile.openstreetmap.org/16/1/2.png')).toBe(true)
     expect(isPhotoPlaceholder('https://upload.wikimedia.org/foo.jpg')).toBe(false)

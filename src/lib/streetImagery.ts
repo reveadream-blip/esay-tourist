@@ -1,4 +1,4 @@
-/** Mapillary (jeton gratuit dashboard) + KartaView (endpoints publics) + Pexels (clé API gratuite). */
+/** Mapillary (jeton dashboard) + KartaView (API publique). */
 
 function bboxMapillary(lat: number, lng: number, halfSpanMeters = 90): string {
   const dLat = halfSpanMeters / 111_320
@@ -104,28 +104,6 @@ export async function getKartaViewPhotoUrl(lat: number, lng: number): Promise<st
     const pj = (await ph.json()) as { status?: KvStatus; result?: { data?: unknown } }
     if (pj.status?.apiCode !== 600 || pj.result?.data == null) return null
     return pickKartaViewImageUrl(pj.result.data)
-  } catch {
-    return null
-  }
-}
-
-/**
- * Pexels — clé gratuite : https://www.pexels.com/api/ (inscription → Authorization dans les en-têtes).
- */
-export async function getPexelsCategoryPhoto(query: string): Promise<string | null> {
-  const key = import.meta.env.VITE_PEXELS_ACCESS_KEY
-  if (!key || typeof key !== 'string') return null
-
-  try {
-    const url = `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`
-    const res = await fetch(url, { headers: { Authorization: key.trim() } })
-    if (!res.ok) return null
-
-    const data = (await res.json()) as {
-      photos?: Array<{ src?: { large2x?: string; large?: string; medium?: string } }>
-    }
-    const src = data.photos?.[0]?.src
-    return src?.large2x ?? src?.large ?? src?.medium ?? null
   } catch {
     return null
   }

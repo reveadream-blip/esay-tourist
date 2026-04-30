@@ -1,9 +1,5 @@
 import type { CategoryId } from '../components/CategoryBar'
-import {
-  getKartaViewPhotoUrl,
-  getMapillaryThumbnailUrl,
-  getPexelsCategoryPhoto,
-} from './streetImagery'
+import { getKartaViewPhotoUrl, getMapillaryThumbnailUrl } from './streetImagery'
 
 /** https://meta.wikimedia.org/wiki/User-Agent_policy */
 export const WIKIMEDIA_USER_AGENT =
@@ -57,7 +53,7 @@ export function categoryToCommonsKeyword(category: string): string {
   return CATEGORY_COMMONS_KEYWORD[category as Exclude<CategoryId, 'all'>] ?? 'city street'
 }
 
-/** Mots-clés courts pour Unsplash / Pexels (photos de stock par thème). */
+/** Mots-clés courts pour affiner la recherche Commons sur le nom du lieu. */
 export function categoryToStockKeyword(category: string): string {
   const m: Record<string, string> = {
     hotels: 'hotel building',
@@ -92,26 +88,24 @@ export function getCategorySvgDataUrl(category: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
+/** True tant qu'on peut encore tenter une vraie image (pas carte / pas état final « sans photo »). */
 export function isPhotoPlaceholder(photo: string): boolean {
+  if (photo.includes('easytravel-pending')) return true
   return (
-    photo.startsWith('data:image/svg+xml') ||
-    photo.includes('staticmap.openstreetmap.de') ||
     photo.includes('tile.openstreetmap.org') ||
+    photo.includes('staticmap.openstreetmap.de') ||
     photo.includes('placehold.co')
   )
 }
 
-/** Tuile OSM (même infra que la carte) — plus fiable que staticmap.de sur certains réseaux / mobiles. */
-export function getOsmTilePreviewUrl(lat: number, lng: number, zoom = 16): string {
-  const z = Math.min(19, Math.max(0, Math.round(zoom)))
-  const n = 2 ** z
-  const latRad = (lat * Math.PI) / 180
-  const x = Math.floor(((lng + 180) / 360) * n)
-  const y = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n)
-  return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
+/** Photo réelle affichable (plus de chargement, pas l’état « aucune photo »). */
+export function hasResolvedPlacePhoto(photo: string): boolean {
+  if (photo.includes('easytravel-nophoto')) return false
+  if (isPhotoPlaceholder(photo)) return false
+  return true
 }
 
-export function getPlacePhotoUrl(tags: Record<string, string>, lat: number, lng: number): string {
+export function getPlacePhotoUrl(tags: Record<string, string>): string {
   const directImage = tags.image ?? tags['image:0']
   if (directImage && /^https?:\/\//i.test(directImage)) {
     return directImage
@@ -122,8 +116,30 @@ export function getPlacePhotoUrl(tags: Record<string, string>, lat: number, lng:
     return toWikimediaFileUrl(wikimediaCommons)
   }
 
-  /* Pas de photo OSM : tuile locale + enrichissement async (Wikidata / wiki / Commons / Unsplash). */
-  return getOsmTilePreviewUrl(lat, lng, 16)
+  /* Pas d'URL OSM : pas de carte en vignette — placeholder jusqu'à enrichissement (Commons / wiki / rue). */
+  return getPendingPhotoDataUrl()
+}
+
+/** SVG neutre pendant la recherche d'une vraie photo (pas une carte). */
+export function getPendingPhotoDataUrl(): string {
+  const svg =
+    '<!--easytravel-pending--><svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e2e8f0"/><stop offset="100%" stop-color="#cbd5e1"/></linearGradient></defs><rect width="1200" height="800" fill="url(#g)"/><text x="600" y="390" text-anchor="middle" font-family="system-ui,sans-serif" font-size="26" fill="#64748b">Recherche d\'une photo du lieu…</text><text x="600" y="430" text-anchor="middle" font-family="system-ui,sans-serif" font-size="17" fill="#94a3b8">Wikidata · Commons · vues de rue</text></svg>'
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+/** État final : aucune image trouvée pour cet établissement (pas une photo carte). */
+export function getNoPhotoDataUrl(): string {
+  const svg =
+    '<!--easytravel-nophoto--><svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f1f5f9"/><stop offset="100%" stop-color="#e2e8f0"/></linearGradient></defs><rect width="1200" height="800" fill="url(#g)"/><text x="600" y="380" text-anchor="middle" font-family="system-ui,sans-serif" font-size="26" fill="#475569">Aucune photo du lieu</text><text x="600" y="420" text-anchor="middle" font-family="system-ui,sans-serif" font-size="17" fill="#94a3b8">Pas d\'image trouvée (Wikidata, Commons, vues de rue)</text></svg>'
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+export function sanitizePlaceNameForImageSearch(name: string): string {
+  return name
+    .replace(/[^\p{L}\p{N}\s'-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 96)
 }
 
 function parseWikipediaTag(wikipediaTag: string): { lang: string; title: string } | null {
@@ -296,26 +312,19 @@ export async function getCommonsSearchImageUrl(searchQuery: string): Promise<str
   return null
 }
 
-type UnsplashSearchResponse = {
-  results?: Array<{ urls?: { regular?: string; small?: string } }>
-}
+async function getCommonsImagesForNamedPlace(name: string, category: string): Promise<string | null> {
+  const clean = sanitizePlaceNameForImageSearch(name)
+  if (clean.length < 2) return null
 
-async function getUnsplashCategoryPhoto(keyword: string): Promise<string | null> {
-  const key = import.meta.env.VITE_UNSPLASH_ACCESS_KEY
-  if (!key || typeof key !== 'string') return null
+  const commonsCat = categoryToCommonsKeyword(category)
+  const stockShort = categoryToStockKeyword(category)
+  const queries = [`${clean} ${commonsCat}`, `${clean} ${stockShort}`, clean]
 
-  const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(keyword)}&per_page=1&orientation=landscape`
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Client-ID ${key.trim()}`,
-      'Accept-Version': 'v1',
-    },
-  })
-  if (!response.ok) return null
-
-  const data = (await response.json()) as UnsplashSearchResponse
-  const first = data.results?.[0]?.urls
-  return first?.regular ?? first?.small ?? null
+  for (const q of queries) {
+    const u = await raceTimeout(getCommonsSearchImageUrl(q), 8000)
+    if (u) return u
+  }
+  return null
 }
 
 /** Timeout pour ne pas bloquer sur une API lente (ex. KartaView saturée). */
@@ -334,17 +343,9 @@ function raceTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   })
 }
 
-/**
- * Dernière couche : image toujours servie par picsum (HTTPS), stable par fiche.
- * Pas une photo du lieu — évite les cartes / SVG vides si tout le reste échoue.
- */
-export function getPicsumPlaceholderUrl(placeId: string, w = 1200, h = 800): string {
-  const safe = placeId.replace(/[^\w-]/g, '').slice(0, 48) || 'place'
-  return `https://picsum.photos/seed/${safe}/${w}/${h}`
-}
-
 export type PhotoEnrichmentInput = {
   placeId: string
+  name: string
   wikidataId?: string
   wikipediaTag?: string
   category: string
@@ -353,10 +354,10 @@ export type PhotoEnrichmentInput = {
 }
 
 /**
- * Ordre : sources « lieu » (wiki) → Commons (souvent OK) → Mapillary → stock → KartaView → picsum garanti.
- * Retourne toujours une URL https affichable.
+ * Uniquement des sources pouvant représenter le lieu (wiki, Commons au nom du POI, rue).
+ * Pas de stock / pas de photo aléatoire. Retourne null → utiliser getNoPhotoDataUrl().
  */
-export async function resolveEnrichedPhoto(input: PhotoEnrichmentInput): Promise<string> {
+export async function resolveEnrichedPhoto(input: PhotoEnrichmentInput): Promise<string | null> {
   const tWiki = 12_000
   const tNet = 7000
   const tKarta = 4500
@@ -370,24 +371,18 @@ export async function resolveEnrichedPhoto(input: PhotoEnrichmentInput): Promise
     if (u) return u
   }
 
-  const commonsKw = categoryToCommonsKeyword(input.category)
+  const byName = await getCommonsImagesForNamedPlace(input.name, input.category)
+  if (byName) return byName
+
   const near = await raceTimeout(getCommonsNearbyImageUrl(input.lat, input.lng), tNet)
   if (near) return near
-  const search = await raceTimeout(getCommonsSearchImageUrl(commonsKw), tNet)
-  if (search) return search
 
   const mapillaryToken = import.meta.env.VITE_MAPILLARY_ACCESS_TOKEN
   const mly = await raceTimeout(getMapillaryThumbnailUrl(input.lat, input.lng, mapillaryToken), tNet)
   if (mly) return mly
 
-  const stockKw = categoryToStockKeyword(input.category)
-  const unsplash = await raceTimeout(getUnsplashCategoryPhoto(stockKw), tNet)
-  if (unsplash) return unsplash
-  const pexels = await raceTimeout(getPexelsCategoryPhoto(stockKw), tNet)
-  if (pexels) return pexels
-
   const karta = await raceTimeout(getKartaViewPhotoUrl(input.lat, input.lng), tKarta)
   if (karta) return karta
 
-  return getPicsumPlaceholderUrl(input.placeId)
+  return null
 }
