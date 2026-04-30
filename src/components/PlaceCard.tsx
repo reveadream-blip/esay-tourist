@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigation, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -32,7 +31,7 @@ function formatDistance(distanceMeters: number) {
 
 export function PlaceCard({ place }: Props) {
   const { t } = useTranslation()
-  const directionUrl = `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`
+  const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${place.lat},${place.lng}`
   const categoryEmoji: Record<string, string> = {
     hotels: '🏨',
     restos: '🍽',
@@ -47,43 +46,12 @@ export function PlaceCard({ place }: Props) {
   }
   const emoji = categoryEmoji[place.category] ?? '📍'
 
-  const imageFallbackChain = useMemo(() => [place.photo], [place.photo])
-
-  const [imageSrc, setImageSrc] = useState(place.photo)
-  const [showVisualFallback, setShowVisualFallback] = useState(false)
-  const chainIndexRef = useRef(0)
-
-  useEffect(() => {
-    chainIndexRef.current = 0
-    setImageSrc(place.photo)
-    setShowVisualFallback(false)
-  }, [place.photo])
-
   return (
     <article className="overflow-hidden rounded-3xl border border-white/30 bg-white/60 shadow-xl backdrop-blur-md">
       <div className="relative h-40">
-        {showVisualFallback ? (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-200 to-slate-400 text-6xl">
-            <span aria-hidden>{emoji}</span>
-          </div>
-        ) : (
-          <img
-            src={imageSrc}
-            alt={place.name}
-            className="h-full w-full object-cover"
-            loading="lazy"
-            onError={() => {
-              chainIndexRef.current += 1
-              const i = chainIndexRef.current
-              if (i < imageFallbackChain.length) {
-                const url = imageFallbackChain[i]
-                if (url) setImageSrc(url)
-                return
-              }
-              setShowVisualFallback(true)
-            }}
-          />
-        )}
+        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-200 to-slate-400 text-6xl">
+          <span aria-hidden>{emoji}</span>
+        </div>
         <span className="absolute right-3 top-3 rounded-full bg-black/65 px-3 py-1 text-xs font-semibold text-white">
           {formatDistance(place.distanceMeters)}
         </span>
@@ -111,13 +79,13 @@ export function PlaceCard({ place }: Props) {
         </div>
 
         <a
-          href={directionUrl}
+          href={streetViewUrl}
           target="_blank"
           rel="noreferrer"
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
         >
           <Navigation className="h-4 w-4" aria-hidden />
-          {t('itinerary')}
+          {t('streetView')}
         </a>
       </div>
     </article>
