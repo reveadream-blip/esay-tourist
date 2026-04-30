@@ -226,7 +226,7 @@ function App() {
       .filter(
         (place) => isPhotoPlaceholder(place.photo) && !attemptedPhotoEnrichmentRef.current.has(place.id),
       )
-      .slice(0, 18)
+      .slice(0, 40)
 
     if (candidates.length === 0) return
 
@@ -249,6 +249,8 @@ function App() {
               wikidataId: place.wikidataId,
               wikipediaTag: place.wikipediaTag,
               category: place.category,
+              lat: place.lat,
+              lng: place.lng,
             })
             if (url) {
               updates.push({ id: place.id, photo: url })

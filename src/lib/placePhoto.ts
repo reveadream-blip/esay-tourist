@@ -93,19 +93,58 @@ export function getPlacePhotoUrl(tags: Record<string, string>, lat: number, lng:
   return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=16&size=1200x800&markers=${lat},${lng},red-pushpin`
 }
 
-export async function getWikipediaThumbnail(wikipediaTag: string): Promise<string | null> {
+function parseWikipediaTag(wikipediaTag: string): { lang: string; title: string } | null {
   const separatorIndex = wikipediaTag.indexOf(':')
   if (separatorIndex <= 0) return null
-
   const lang = wikipediaTag.slice(0, separatorIndex)
   const title = wikipediaTag.slice(separatorIndex + 1).replace(/ /g, '_')
+  if (!lang || !title) return null
+  return { lang, title }
+}
+
+/** Résumé REST (souvent OK en navigateur) ; fallback action=query+pageimages avec origin=* (CORS MediaWiki). */
+export async function getWikipediaThumbnail(wikipediaTag: string): Promise<string | null> {
+  const parsed = parseWikipediaTag(wikipediaTag)
+  if (!parsed) return null
+
+  const { lang, title } = parsed
   const endpoint = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`
 
-  const response = await wikimediaFetch(endpoint)
-  if (!response.ok) return null
+  try {
+    const response = await wikimediaFetch(endpoint)
+    if (response.ok) {
+      const data = (await response.json()) as { thumbnail?: { source?: string } }
+      const fromRest = data.thumbnail?.source
+      if (fromRest && /^https?:\/\//i.test(fromRest)) return fromRest
+    }
+  } catch {
+    /* fall through to action=query */
+  }
 
-  const data = (await response.json()) as { thumbnail?: { source?: string } }
-  return data.thumbnail?.source ?? null
+  const params = new URLSearchParams({
+    action: 'query',
+    format: 'json',
+    origin: '*',
+    prop: 'pageimages',
+    piprop: 'thumbnail',
+    pithumbsize: '800',
+    titles: title.replace(/_/g, ' '),
+  })
+  const apiUrl = `https://${lang}.wikipedia.org/w/api.php?${params}`
+  const apiRes = await wikimediaFetch(apiUrl)
+  if (!apiRes.ok) return null
+
+  const apiData = (await apiRes.json()) as {
+    query?: { pages?: Record<string, { thumbnail?: { source?: string } }> }
+  }
+  const pages = apiData.query?.pages
+  if (!pages) return null
+
+  for (const page of Object.values(pages)) {
+    const src = page.thumbnail?.source
+    if (src && /^https?:\/\//i.test(src)) return src
+  }
+  return null
 }
 
 type WbEntitiesResponse = {
@@ -125,6 +164,7 @@ export async function getWikidataP18ImageUrl(qid: string): Promise<string | null
     ids: qid,
     format: 'json',
     props: 'claims',
+    origin: '*',
   })
   const response = await wikimediaFetch(`https://www.wikidata.org/w/api.php?${params}`)
   if (!response.ok) return null
@@ -149,14 +189,60 @@ type CommonsQueryResponse = {
   }
 }
 
+/** Image Commons géolocalisée la plus proche (souvent mieux qu’un mot-clé générique). */
+export async function getCommonsNearbyImageUrl(lat: number, lng: number): Promise<string | null> {
+  const listParams = new URLSearchParams({
+    action: 'query',
+    format: 'json',
+    origin: '*',
+    list: 'geosearch',
+    gscoord: `${lat}|${lng}`,
+    gsradius: '2500',
+    gslimit: '6',
+    gsnamespace: '6',
+  })
+  const listRes = await wikimediaFetch(`https://commons.wikimedia.org/w/api.php?${listParams}`)
+  if (!listRes.ok) return null
+
+  const listData = (await listRes.json()) as {
+    query?: { geosearch?: Array<{ pageid: number }> }
+  }
+  const pageid = listData.query?.geosearch?.[0]?.pageid
+  if (pageid === undefined) return null
+
+  const imgParams = new URLSearchParams({
+    action: 'query',
+    format: 'json',
+    origin: '*',
+    pageids: String(pageid),
+    prop: 'imageinfo',
+    iiprop: 'url|thumburl',
+    iiurlwidth: '800',
+  })
+  const imgRes = await wikimediaFetch(`https://commons.wikimedia.org/w/api.php?${imgParams}`)
+  if (!imgRes.ok) return null
+
+  const imgData = (await imgRes.json()) as CommonsQueryResponse
+  const pages = imgData.query?.pages
+  if (!pages) return null
+
+  for (const page of Object.values(pages)) {
+    const info = page.imageinfo?.[0]
+    const url = info?.thumburl ?? info?.url
+    if (url && /^https?:\/\//i.test(url)) return url
+  }
+  return null
+}
+
 export async function getCommonsSearchImageUrl(searchQuery: string): Promise<string | null> {
   const params = new URLSearchParams({
     action: 'query',
     format: 'json',
+    origin: '*',
     generator: 'search',
     gsrsearch: searchQuery,
     gsrnamespace: '6',
-    gsrlimit: '3',
+    gsrlimit: '5',
     prop: 'imageinfo',
     iiprop: 'url|thumburl',
     iiurlwidth: '800',
@@ -203,6 +289,8 @@ export type PhotoEnrichmentInput = {
   wikidataId?: string
   wikipediaTag?: string
   category: string
+  lat: number
+  lng: number
 }
 
 export async function resolveEnrichedPhoto(input: PhotoEnrichmentInput): Promise<string | null> {
@@ -219,6 +307,9 @@ export async function resolveEnrichedPhoto(input: PhotoEnrichmentInput): Promise
   const keyword = categoryToCommonsKeyword(input.category)
   const fromUnsplash = await getUnsplashCategoryPhoto(keyword)
   if (fromUnsplash) return fromUnsplash
+
+  const fromNearby = await getCommonsNearbyImageUrl(input.lat, input.lng)
+  if (fromNearby) return fromNearby
 
   return getCommonsSearchImageUrl(keyword)
 }

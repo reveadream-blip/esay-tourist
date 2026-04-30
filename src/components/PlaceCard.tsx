@@ -49,7 +49,6 @@ export function PlaceCard({ place }: Props) {
           alt={place.name}
           className="h-full w-full object-cover"
           loading="lazy"
-          referrerPolicy="no-referrer"
           onError={() => {
             if (imageSrc !== categorySvgFallback) {
               setImageSrc(categorySvgFallback)
