@@ -72,6 +72,12 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [locationError, setLocationError] = useState(false)
   const attemptedPhotoEnrichmentRef = useRef<Set<string>>(new Set())
+  const placesRef = useRef<Place[]>([])
+  placesRef.current = places
+
+  useEffect(() => {
+    attemptedPhotoEnrichmentRef.current.clear()
+  }, [position?.lat, position?.lng, debouncedSearch])
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -184,7 +190,7 @@ function App() {
     const loadNearbyPlaces = async () => {
       setIsLoading(true)
       try {
-        const cachedFast = sessionStorage.getItem(`easytravel3-fast-${cacheKeyBase}`)
+        const cachedFast = sessionStorage.getItem(`easytravel4-fast-${cacheKeyBase}`)
         if (cachedFast) {
           setPlaces(JSON.parse(cachedFast) as Place[])
           setIsLoading(false)
@@ -194,10 +200,10 @@ function App() {
         if (!controller.signal.aborted) {
           setPlaces(fastPlaces)
           setIsLoading(false)
-          sessionStorage.setItem(`easytravel3-fast-${cacheKeyBase}`, JSON.stringify(fastPlaces))
+          sessionStorage.setItem(`easytravel4-fast-${cacheKeyBase}`, JSON.stringify(fastPlaces))
         }
 
-        const fullCacheKey = `easytravel3-full-${cacheKeyBase}`
+        const fullCacheKey = `easytravel4-full-${cacheKeyBase}`
         const cachedFull = sessionStorage.getItem(fullCacheKey)
         if (cachedFull && !controller.signal.aborted) {
           setPlaces(JSON.parse(cachedFull) as Place[])
@@ -222,66 +228,72 @@ function App() {
   }, [position, debouncedSearch])
 
   useEffect(() => {
-    const candidates = places
-      .filter(
-        (place) => isPhotoPlaceholder(place.photo) && !attemptedPhotoEnrichmentRef.current.has(place.id),
-      )
-      .slice(0, 40)
-
-    if (candidates.length === 0) return
+    if (places.length === 0) return
 
     let cancelled = false
-    const concurrency = 3
-    const queue = [...candidates]
+    const debounceMs = 600
+    const timer = window.setTimeout(() => {
+      const snapshot = placesRef.current
+      const candidates = snapshot
+        .filter(
+          (place) =>
+            isPhotoPlaceholder(place.photo) && !attemptedPhotoEnrichmentRef.current.has(place.id),
+        )
+        .slice(0, 60)
 
-    const runWorkers = async () => {
-      const updates: Array<{ id: string; photo: string }> = []
+      if (candidates.length === 0 || cancelled) return
 
-      const worker = async () => {
-        while (queue.length > 0 && !cancelled) {
-          const place = queue[0]
-          if (!place) break
+      const concurrency = 4
+      const queue = [...candidates]
 
-          try {
-            const url = await resolveEnrichedPhoto({
-              wikidataId: place.wikidataId,
-              wikipediaTag: place.wikipediaTag,
-              category: place.category,
-              lat: place.lat,
-              lng: place.lng,
-            })
-            /* Ne marquer « tenté » qu’après la réponse : évite IDs bloqués si l’effet est annulé
-             * (liste rapide → liste complète, ou StrictMode). */
-            if (cancelled) break
-            queue.shift()
-            attemptedPhotoEnrichmentRef.current.add(place.id)
-            if (url) {
+      const runWorkers = async () => {
+        const updates: Array<{ id: string; photo: string }> = []
+
+        const worker = async () => {
+          while (queue.length > 0 && !cancelled) {
+            const place = queue[0]
+            if (!place) break
+
+            try {
+              const url = await resolveEnrichedPhoto({
+                placeId: place.id,
+                wikidataId: place.wikidataId,
+                wikipediaTag: place.wikipediaTag,
+                category: place.category,
+                lat: place.lat,
+                lng: place.lng,
+              })
+              if (cancelled) break
+              queue.shift()
+              attemptedPhotoEnrichmentRef.current.add(place.id)
               updates.push({ id: place.id, photo: url })
+            } catch {
+              if (cancelled) break
+              queue.shift()
+              attemptedPhotoEnrichmentRef.current.add(place.id)
             }
-          } catch {
-            if (cancelled) break
-            queue.shift()
-            attemptedPhotoEnrichmentRef.current.add(place.id)
           }
         }
+
+        await Promise.all(Array.from({ length: concurrency }, () => worker()))
+
+        if (cancelled || updates.length === 0) return
+
+        const updateMap = new Map(updates.map((item) => [item.id, item.photo]))
+        setPlaces((currentPlaces) =>
+          currentPlaces.map((place) => {
+            const nextPhoto = updateMap.get(place.id)
+            return nextPhoto ? { ...place, photo: nextPhoto } : place
+          }),
+        )
       }
 
-      await Promise.all(Array.from({ length: concurrency }, () => worker()))
+      void runWorkers()
+    }, debounceMs)
 
-      if (cancelled || updates.length === 0) return
-
-      const updateMap = new Map(updates.map((item) => [item.id, item.photo]))
-      setPlaces((currentPlaces) =>
-        currentPlaces.map((place) => {
-          const nextPhoto = updateMap.get(place.id)
-          return nextPhoto ? { ...place, photo: nextPhoto } : place
-        }),
-      )
-    }
-
-    void runWorkers()
     return () => {
       cancelled = true
+      window.clearTimeout(timer)
     }
   }, [places])
 

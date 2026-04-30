@@ -318,7 +318,33 @@ async function getUnsplashCategoryPhoto(keyword: string): Promise<string | null>
   return first?.regular ?? first?.small ?? null
 }
 
+/** Timeout pour ne pas bloquer sur une API lente (ex. KartaView saturée). */
+function raceTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = globalThis.setTimeout(() => resolve(null), ms)
+    void Promise.resolve(promise)
+      .then((v) => {
+        globalThis.clearTimeout(timer)
+        resolve(v ?? null)
+      })
+      .catch(() => {
+        globalThis.clearTimeout(timer)
+        resolve(null)
+      })
+  })
+}
+
+/**
+ * Dernière couche : image toujours servie par picsum (HTTPS), stable par fiche.
+ * Pas une photo du lieu — évite les cartes / SVG vides si tout le reste échoue.
+ */
+export function getPicsumPlaceholderUrl(placeId: string, w = 1200, h = 800): string {
+  const safe = placeId.replace(/[^\w-]/g, '').slice(0, 48) || 'place'
+  return `https://picsum.photos/seed/${safe}/${w}/${h}`
+}
+
 export type PhotoEnrichmentInput = {
+  placeId: string
   wikidataId?: string
   wikipediaTag?: string
   category: string
@@ -326,34 +352,42 @@ export type PhotoEnrichmentInput = {
   lng: number
 }
 
-export async function resolveEnrichedPhoto(input: PhotoEnrichmentInput): Promise<string | null> {
+/**
+ * Ordre : sources « lieu » (wiki) → Commons (souvent OK) → Mapillary → stock → KartaView → picsum garanti.
+ * Retourne toujours une URL https affichable.
+ */
+export async function resolveEnrichedPhoto(input: PhotoEnrichmentInput): Promise<string> {
+  const tWiki = 12_000
+  const tNet = 7000
+  const tKarta = 4500
+
   if (input.wikidataId) {
-    const fromWd = await getWikidataP18ImageUrl(input.wikidataId)
-    if (fromWd) return fromWd
+    const u = await raceTimeout(getWikidataP18ImageUrl(input.wikidataId), tWiki)
+    if (u) return u
   }
-
   if (input.wikipediaTag) {
-    const fromWiki = await getWikipediaThumbnail(input.wikipediaTag)
-    if (fromWiki) return fromWiki
+    const u = await raceTimeout(getWikipediaThumbnail(input.wikipediaTag), tWiki)
+    if (u) return u
   }
-
-  const fromKarta = await getKartaViewPhotoUrl(input.lat, input.lng)
-  if (fromKarta) return fromKarta
-
-  const mapillaryToken = import.meta.env.VITE_MAPILLARY_ACCESS_TOKEN
-  const fromMly = await getMapillaryThumbnailUrl(input.lat, input.lng, mapillaryToken)
-  if (fromMly) return fromMly
-
-  const stockKw = categoryToStockKeyword(input.category)
-  const fromUnsplash = await getUnsplashCategoryPhoto(stockKw)
-  if (fromUnsplash) return fromUnsplash
-
-  const fromPexels = await getPexelsCategoryPhoto(stockKw)
-  if (fromPexels) return fromPexels
 
   const commonsKw = categoryToCommonsKeyword(input.category)
-  const fromNearby = await getCommonsNearbyImageUrl(input.lat, input.lng)
-  if (fromNearby) return fromNearby
+  const near = await raceTimeout(getCommonsNearbyImageUrl(input.lat, input.lng), tNet)
+  if (near) return near
+  const search = await raceTimeout(getCommonsSearchImageUrl(commonsKw), tNet)
+  if (search) return search
 
-  return getCommonsSearchImageUrl(commonsKw)
+  const mapillaryToken = import.meta.env.VITE_MAPILLARY_ACCESS_TOKEN
+  const mly = await raceTimeout(getMapillaryThumbnailUrl(input.lat, input.lng, mapillaryToken), tNet)
+  if (mly) return mly
+
+  const stockKw = categoryToStockKeyword(input.category)
+  const unsplash = await raceTimeout(getUnsplashCategoryPhoto(stockKw), tNet)
+  if (unsplash) return unsplash
+  const pexels = await raceTimeout(getPexelsCategoryPhoto(stockKw), tNet)
+  if (pexels) return pexels
+
+  const karta = await raceTimeout(getKartaViewPhotoUrl(input.lat, input.lng), tKarta)
+  if (karta) return karta
+
+  return getPicsumPlaceholderUrl(input.placeId)
 }
