@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigation, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { getCategorySvgDataUrl } from '../lib/placePhoto'
 
 export type RatingSource = 'osm' | 'estimated'
 
@@ -10,6 +11,7 @@ export type Place = {
   name: string
   photo: string
   wikipediaTag?: string
+  wikidataId?: string
   lat: number
   lng: number
   rating: number
@@ -32,8 +34,7 @@ function formatDistance(distanceMeters: number) {
 export function PlaceCard({ place }: Props) {
   const { t } = useTranslation()
   const directionUrl = `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`
-  const staticMapFallback = `https://staticmap.openstreetmap.de/staticmap.php?center=${place.lat},${place.lng}&zoom=16&size=1200x800&markers=${place.lat},${place.lng},red-pushpin`
-  const placeholderFallback = `https://placehold.co/1200x800/e2e8f0/475569?text=${encodeURIComponent(place.name)}`
+  const categorySvgFallback = getCategorySvgDataUrl(place.category)
   const [imageSrc, setImageSrc] = useState(place.photo)
 
   useEffect(() => {
@@ -50,12 +51,8 @@ export function PlaceCard({ place }: Props) {
           loading="lazy"
           referrerPolicy="no-referrer"
           onError={() => {
-            if (imageSrc !== staticMapFallback) {
-              setImageSrc(staticMapFallback)
-              return
-            }
-            if (imageSrc !== placeholderFallback) {
-              setImageSrc(placeholderFallback)
+            if (imageSrc !== categorySvgFallback) {
+              setImageSrc(categorySvgFallback)
             }
           }}
         />

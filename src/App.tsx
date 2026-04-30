@@ -17,7 +17,13 @@ import {
   FAST_RADIUS_METERS,
   MAX_RADIUS_METERS,
 } from './lib/overpassQuery'
-import { getPlacePhotoUrl, getWikipediaThumbnail } from './lib/placePhoto'
+import {
+  extractWikidataId,
+  extractWikipediaTag,
+  getPlacePhotoUrl,
+  isPhotoPlaceholder,
+  resolveEnrichedPhoto,
+} from './lib/placePhoto'
 import { getStableEstimatedRating, inferCategory } from './lib/placesLogic'
 import { getSearchRelevanceScore } from './lib/searchRelevance'
 
@@ -65,7 +71,7 @@ function App() {
   const [places, setPlaces] = useState<Place[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [locationError, setLocationError] = useState(false)
-  const attemptedWikipediaPhotoIdsRef = useRef<Set<string>>(new Set())
+  const attemptedPhotoEnrichmentRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -154,8 +160,9 @@ function App() {
             id,
             category: categoryId,
             name,
-            photo: getPlacePhotoUrl(tags, lat, lng),
-            wikipediaTag: tags.wikipedia,
+            photo: getPlacePhotoUrl(tags, categoryId),
+            wikipediaTag: extractWikipediaTag(tags),
+            wikidataId: extractWikidataId(tags),
             lat,
             lng,
             rating,
@@ -217,16 +224,13 @@ function App() {
   useEffect(() => {
     const candidates = places
       .filter(
-        (place) =>
-          Boolean(place.wikipediaTag) &&
-          place.photo.includes('staticmap.openstreetmap.de') &&
-          !attemptedWikipediaPhotoIdsRef.current.has(place.id),
+        (place) => isPhotoPlaceholder(place.photo) && !attemptedPhotoEnrichmentRef.current.has(place.id),
       )
       .slice(0, 18)
 
     if (candidates.length === 0) return
 
-    candidates.forEach((place) => attemptedWikipediaPhotoIdsRef.current.add(place.id))
+    candidates.forEach((place) => attemptedPhotoEnrichmentRef.current.add(place.id))
 
     let cancelled = false
     const concurrency = 3
@@ -238,12 +242,16 @@ function App() {
       const worker = async () => {
         while (queue.length > 0 && !cancelled) {
           const place = queue.shift()
-          if (!place?.wikipediaTag) continue
+          if (!place) continue
 
           try {
-            const thumbnailUrl = await getWikipediaThumbnail(place.wikipediaTag)
-            if (thumbnailUrl) {
-              updates.push({ id: place.id, photo: thumbnailUrl })
+            const url = await resolveEnrichedPhoto({
+              wikidataId: place.wikidataId,
+              wikipediaTag: place.wikipediaTag,
+              category: place.category,
+            })
+            if (url) {
+              updates.push({ id: place.id, photo: url })
             }
           } catch {
             /* ignore */
