@@ -45,9 +45,10 @@ describe('categoryToCommonsKeyword', () => {
 })
 
 describe('isPhotoPlaceholder', () => {
-  it('detects svg and legacy fallbacks', () => {
-    expect(isPhotoPlaceholder('data:image/svg+xml;base64,xxx')).toBe(true)
+  it('detects svg, static map, osm tile, and not real photos', () => {
+    expect(isPhotoPlaceholder('data:image/svg+xml;charset=utf-8,%3Csvg')).toBe(true)
     expect(isPhotoPlaceholder('https://staticmap.openstreetmap.de/staticmap.php?x=1')).toBe(true)
+    expect(isPhotoPlaceholder('https://tile.openstreetmap.org/16/1/2.png')).toBe(true)
     expect(isPhotoPlaceholder('https://upload.wikimedia.org/foo.jpg')).toBe(false)
   })
 })

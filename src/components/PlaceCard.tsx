@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Navigation, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getCategorySvgDataUrl } from '../lib/placePhoto'
+import { getCategorySvgDataUrl, getOsmTilePreviewUrl } from '../lib/placePhoto'
 
 export type RatingSource = 'osm' | 'estimated'
 
@@ -35,9 +35,20 @@ export function PlaceCard({ place }: Props) {
   const { t } = useTranslation()
   const directionUrl = `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`
   const categorySvgFallback = getCategorySvgDataUrl(place.category)
+
+  const imageFallbackChain = useMemo(() => {
+    const tile = getOsmTilePreviewUrl(place.lat, place.lng)
+    const staticMap = `https://staticmap.openstreetmap.de/staticmap.php?center=${place.lat},${place.lng}&zoom=16&size=1200x800&markers=${place.lat},${place.lng},red-pushpin`
+    return [place.photo, tile, staticMap, categorySvgFallback].filter(
+      (url, index, array) => array.indexOf(url) === index,
+    )
+  }, [place.photo, place.lat, place.lng, categorySvgFallback])
+
   const [imageSrc, setImageSrc] = useState(place.photo)
+  const chainIndexRef = useRef(0)
 
   useEffect(() => {
+    chainIndexRef.current = 0
     setImageSrc(place.photo)
   }, [place.photo])
 
@@ -50,8 +61,11 @@ export function PlaceCard({ place }: Props) {
           className="h-full w-full object-cover"
           loading="lazy"
           onError={() => {
-            if (imageSrc !== categorySvgFallback) {
-              setImageSrc(categorySvgFallback)
+            chainIndexRef.current += 1
+            const i = chainIndexRef.current
+            if (i < imageFallbackChain.length) {
+              const url = imageFallbackChain[i]
+              if (url) setImageSrc(url)
             }
           }}
         />

@@ -184,7 +184,7 @@ function App() {
     const loadNearbyPlaces = async () => {
       setIsLoading(true)
       try {
-        const cachedFast = sessionStorage.getItem(`easytravel-fast-${cacheKeyBase}`)
+        const cachedFast = sessionStorage.getItem(`easytravel3-fast-${cacheKeyBase}`)
         if (cachedFast) {
           setPlaces(JSON.parse(cachedFast) as Place[])
           setIsLoading(false)
@@ -194,10 +194,10 @@ function App() {
         if (!controller.signal.aborted) {
           setPlaces(fastPlaces)
           setIsLoading(false)
-          sessionStorage.setItem(`easytravel-fast-${cacheKeyBase}`, JSON.stringify(fastPlaces))
+          sessionStorage.setItem(`easytravel3-fast-${cacheKeyBase}`, JSON.stringify(fastPlaces))
         }
 
-        const fullCacheKey = `easytravel-full-${cacheKeyBase}`
+        const fullCacheKey = `easytravel3-full-${cacheKeyBase}`
         const cachedFull = sessionStorage.getItem(fullCacheKey)
         if (cachedFull && !controller.signal.aborted) {
           setPlaces(JSON.parse(cachedFull) as Place[])
@@ -230,8 +230,6 @@ function App() {
 
     if (candidates.length === 0) return
 
-    candidates.forEach((place) => attemptedPhotoEnrichmentRef.current.add(place.id))
-
     let cancelled = false
     const concurrency = 3
     const queue = [...candidates]
@@ -241,8 +239,8 @@ function App() {
 
       const worker = async () => {
         while (queue.length > 0 && !cancelled) {
-          const place = queue.shift()
-          if (!place) continue
+          const place = queue[0]
+          if (!place) break
 
           try {
             const url = await resolveEnrichedPhoto({
@@ -252,11 +250,18 @@ function App() {
               lat: place.lat,
               lng: place.lng,
             })
+            /* Ne marquer « tenté » qu’après la réponse : évite IDs bloqués si l’effet est annulé
+             * (liste rapide → liste complète, ou StrictMode). */
+            if (cancelled) break
+            queue.shift()
+            attemptedPhotoEnrichmentRef.current.add(place.id)
             if (url) {
               updates.push({ id: place.id, photo: url })
             }
           } catch {
-            /* ignore */
+            if (cancelled) break
+            queue.shift()
+            attemptedPhotoEnrichmentRef.current.add(place.id)
           }
         }
       }

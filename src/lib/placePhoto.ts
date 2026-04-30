@@ -74,8 +74,19 @@ export function isPhotoPlaceholder(photo: string): boolean {
   return (
     photo.startsWith('data:image/svg+xml') ||
     photo.includes('staticmap.openstreetmap.de') ||
+    photo.includes('tile.openstreetmap.org') ||
     photo.includes('placehold.co')
   )
+}
+
+/** Tuile OSM (même infra que la carte) — plus fiable que staticmap.de sur certains réseaux / mobiles. */
+export function getOsmTilePreviewUrl(lat: number, lng: number, zoom = 16): string {
+  const z = Math.min(19, Math.max(0, Math.round(zoom)))
+  const n = 2 ** z
+  const latRad = (lat * Math.PI) / 180
+  const x = Math.floor(((lng + 180) / 360) * n)
+  const y = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n)
+  return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
 }
 
 export function getPlacePhotoUrl(tags: Record<string, string>, lat: number, lng: number): string {
@@ -89,8 +100,8 @@ export function getPlacePhotoUrl(tags: Record<string, string>, lat: number, lng:
     return toWikimediaFileUrl(wikimediaCommons)
   }
 
-  /* Pas de photo OSM : carte locale + enrichissement async (Wikidata / wiki / Commons / Unsplash). */
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=16&size=1200x800&markers=${lat},${lng},red-pushpin`
+  /* Pas de photo OSM : tuile locale + enrichissement async (Wikidata / wiki / Commons / Unsplash). */
+  return getOsmTilePreviewUrl(lat, lng, 16)
 }
 
 function parseWikipediaTag(wikipediaTag: string): { lang: string; title: string } | null {
