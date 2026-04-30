@@ -1,0 +1,3 @@
+export const MAX_RADIUS_METERS = 50000
+export const FAST_RADIUS_METERS = 8000
+export const OVERPASS_RESULT_LIMIT = 12000

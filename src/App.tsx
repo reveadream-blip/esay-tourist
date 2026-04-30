@@ -8,31 +8,24 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { CategoryBar, type CategoryId } from './components/CategoryBar'
+import { ClusteredPlaceMarkers } from './components/ClusteredPlaceMarkers'
 import { PlaceCard, type Place } from './components/PlaceCard'
-
-const EARTH_RADIUS_KM = 6371
-const MAX_RADIUS_METERS = 50000
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
-const FAST_RADIUS_METERS = 8000
-const OVERPASS_RESULT_LIMIT = 12000
+import { haversineMeters } from './lib/geo'
+import { fetchOverpass } from './lib/overpass'
+import {
+  buildOverpassQuery,
+  FAST_RADIUS_METERS,
+  MAX_RADIUS_METERS,
+} from './lib/overpassQuery'
+import { getPlacePhotoUrl, getWikipediaThumbnail } from './lib/placePhoto'
+import { getStableEstimatedRating, inferCategory } from './lib/placesLogic'
+import { getSearchRelevanceScore } from './lib/searchRelevance'
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
   iconUrl: markerIcon,
   shadowUrl: markerShadow,
 })
-
-const toRadians = (value: number) => (value * Math.PI) / 180
-
-const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-  const dLat = toRadians(lat2 - lat1)
-  const dLng = toRadians(lng2 - lng1)
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return EARTH_RADIUS_KM * c * 1000
-}
 
 type OsmElement = {
   id: number
@@ -45,120 +38,6 @@ type OsmElement = {
 
 type OsmResponse = {
   elements: OsmElement[]
-}
-
-const CATEGORY_RULES: Array<{ category: Exclude<CategoryId, 'all'>; match: (tags: Record<string, string>) => boolean }> =
-  [
-    {
-      category: 'hotels',
-      match: (tags) =>
-        ['hotel', 'motel', 'hostel', 'guest_house', 'apartment'].includes(tags.tourism ?? '') ||
-        ['hotel', 'motel'].includes(tags.building ?? ''),
-    },
-    {
-      category: 'restos',
-      match: (tags) => ['restaurant', 'cafe', 'fast_food', 'food_court', 'ice_cream'].includes(tags.amenity ?? ''),
-    },
-    {
-      category: 'bars',
-      match: (tags) => ['bar', 'pub', 'biergarten'].includes(tags.amenity ?? ''),
-    },
-    {
-      category: 'nightlife',
-      match: (tags) => ['nightclub', 'stripclub'].includes(tags.amenity ?? '') || tags.club === 'nightclub',
-    },
-    {
-      category: 'spa',
-      match: (tags) => tags.amenity === 'spa' || tags.leisure === 'spa' || tags.shop === 'massage',
-    },
-    {
-      category: 'monuments',
-      match: (tags) =>
-        ['monument', 'memorial', 'ruins', 'castle', 'archaeological_site'].includes(tags.historic ?? '') ||
-        ['museum', 'attraction', 'artwork', 'viewpoint'].includes(tags.tourism ?? ''),
-    },
-    {
-      category: 'rentals',
-      match: (tags) =>
-        ['car_rental', 'bicycle_rental', 'motorcycle_rental', 'vehicle_rental', 'boat_rental'].includes(
-          tags.amenity ?? '',
-        ) || tags.shop === 'car_rental',
-    },
-    {
-      category: 'activities',
-      match: (tags) =>
-        ['park', 'playground', 'sports_centre', 'fitness_centre', 'water_park', 'marina'].includes(tags.leisure ?? '') ||
-        ['theme_park', 'zoo', 'aquarium', 'gallery'].includes(tags.tourism ?? '') ||
-        tags.amenity === 'marketplace' ||
-        tags.shop === 'mall' ||
-        tags.amenity === 'travel_agency',
-    },
-  ]
-
-const inferCategory = (tags: Record<string, string>): Exclude<CategoryId, 'all'> => {
-  const matched = CATEGORY_RULES.find((rule) => rule.match(tags))
-  return matched?.category ?? 'activities'
-}
-
-const getStableRating = (rawId: string): number => {
-  const seed = rawId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  return 3.8 + (seed % 12) / 10
-}
-
-const toWikimediaFileUrl = (commonsFileName: string) => {
-  const normalized = commonsFileName.startsWith('File:')
-    ? commonsFileName.slice(5)
-    : commonsFileName
-  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(normalized)}`
-}
-
-const getPlacePhotoUrl = (tags: Record<string, string>, lat: number, lng: number) => {
-  const directImage = tags.image ?? tags['image:0']
-  if (directImage && /^https?:\/\//i.test(directImage)) {
-    return directImage
-  }
-
-  const wikimediaCommons = tags.wikimedia_commons
-  if (wikimediaCommons) {
-    return toWikimediaFileUrl(wikimediaCommons)
-  }
-
-  // Fallback to a static map centered on the exact place location.
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=16&size=1200x800&markers=${lat},${lng},red-pushpin`
-}
-
-const getWikipediaThumbnail = async (wikipediaTag: string): Promise<string | null> => {
-  const separatorIndex = wikipediaTag.indexOf(':')
-  if (separatorIndex <= 0) return null
-
-  const lang = wikipediaTag.slice(0, separatorIndex)
-  const title = wikipediaTag.slice(separatorIndex + 1).replace(/ /g, '_')
-  const endpoint = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`
-
-  const response = await fetch(endpoint)
-  if (!response.ok) return null
-
-  const data = (await response.json()) as { thumbnail?: { source?: string } }
-  return data.thumbnail?.source ?? null
-}
-
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-const buildOverpassQuery = (lat: number, lng: number, radiusMeters: number, searchTerm = ''): string => {
-  const normalizedSearch = searchTerm.trim()
-  const nameFilter = normalizedSearch ? `["name"~"${escapeRegex(normalizedSearch)}",i]` : ''
-
-  return `
-[out:json][timeout:40];
-(
-  nwr(around:${radiusMeters},${lat},${lng})[amenity~"restaurant|cafe|fast_food|food_court|bar|pub|biergarten|nightclub|spa|marketplace|travel_agency|car_rental|bicycle_rental|motorcycle_rental|vehicle_rental|boat_rental"]${nameFilter};
-  nwr(around:${radiusMeters},${lat},${lng})[tourism~"hotel|motel|hostel|guest_house|apartment|attraction|museum|artwork|viewpoint|theme_park|zoo|aquarium|gallery"]${nameFilter};
-  nwr(around:${radiusMeters},${lat},${lng})[historic~"monument|memorial|ruins|castle|archaeological_site"]${nameFilter};
-  nwr(around:${radiusMeters},${lat},${lng})[leisure~"park|playground|sports_centre|fitness_centre|water_park|marina|spa"]${nameFilter};
-  nwr(around:${radiusMeters},${lat},${lng})[shop~"mall|car_rental|massage"]${nameFilter};
-);
-out center ${OVERPASS_RESULT_LIMIT};
-`
 }
 
 type SearchMapFocusProps = {
@@ -195,17 +74,48 @@ function App() {
       return
     }
 
+    let watchId: number | undefined
+    let debounceTimer: ReturnType<typeof setTimeout>
+
+    const applyPosition = (lat: number, lng: number) => {
+      setPosition((prev) => {
+        if (prev && Math.abs(prev.lat - lat) < 0.00005 && Math.abs(prev.lng - lng) < 0.00005) {
+          return prev
+        }
+        return { lat, lng }
+      })
+      setIsLoading(false)
+      setLocationError(false)
+    }
+
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setPosition({ lat: coords.latitude, lng: coords.longitude })
-        setIsLoading(false)
-      },
+      ({ coords }) => applyPosition(coords.latitude, coords.longitude),
       () => {
         setLocationError(true)
         setIsLoading(false)
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     )
+
+    watchId = navigator.geolocation.watchPosition(
+      ({ coords }) => {
+        window.clearTimeout(debounceTimer)
+        debounceTimer = window.setTimeout(() => {
+          applyPosition(coords.latitude, coords.longitude)
+        }, 1500)
+      },
+      () => {
+        /* erreurs silencieuses : le premier getCurrentPosition gère l’échec total */
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 25000 },
+    )
+
+    return () => {
+      window.clearTimeout(debounceTimer)
+      if (watchId !== undefined) {
+        navigator.geolocation.clearWatch(watchId)
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -230,13 +140,15 @@ function App() {
           const name = tags.name ?? tags['name:en'] ?? tags.brand
           if (!name) return acc
 
-          const distanceMeters = haversine(position.lat, position.lng, lat, lng)
+          const distanceMeters = haversineMeters(position.lat, position.lng, lat, lng)
           if (distanceMeters > MAX_RADIUS_METERS) return acc
 
           const id = `${element.type}-${element.id}`
           const categoryId = inferCategory(tags)
           const stars = Number(tags.stars)
-          const rating = Number.isFinite(stars) && stars > 0 ? Math.min(5, stars) : getStableRating(id)
+          const hasOsmStars = Number.isFinite(stars) && stars > 0
+          const rating = hasOsmStars ? Math.min(5, stars) : getStableEstimatedRating(id)
+          const ratingSource = hasOsmStars ? 'osm' : 'estimated'
 
           acc.push({
             id,
@@ -247,6 +159,7 @@ function App() {
             lat,
             lng,
             rating,
+            ratingSource,
             distanceMeters,
           })
           return acc
@@ -254,15 +167,8 @@ function App() {
         .filter((place, index, array) => array.findIndex((item) => item.id === place.id) === index)
 
     const fetchAndParse = async (radiusMeters: number) => {
-      const response = await fetch(OVERPASS_URL, {
-        method: 'POST',
-        body: buildOverpassQuery(position.lat, position.lng, radiusMeters, debouncedSearch),
-        signal: controller.signal,
-      })
-
-      if (!response.ok) {
-        throw new Error(`Overpass failed: ${response.status}`)
-      }
+      const query = buildOverpassQuery(position.lat, position.lng, radiusMeters, debouncedSearch)
+      const response = await fetchOverpass(query, controller.signal)
 
       const data = (await response.json()) as OsmResponse
       return parsePlaces(data)
@@ -277,7 +183,6 @@ function App() {
           setIsLoading(false)
         }
 
-        // Step 1: quick nearby results for fast map rendering.
         const fastPlaces = await fetchAndParse(FAST_RADIUS_METERS)
         if (!controller.signal.aborted) {
           setPlaces(fastPlaces)
@@ -285,7 +190,6 @@ function App() {
           sessionStorage.setItem(`easytravel-fast-${cacheKeyBase}`, JSON.stringify(fastPlaces))
         }
 
-        // Step 2: full 50km enrichment in background.
         const fullCacheKey = `easytravel-full-${cacheKeyBase}`
         const cachedFull = sessionStorage.getItem(fullCacheKey)
         if (cachedFull && !controller.signal.aborted) {
@@ -298,7 +202,7 @@ function App() {
           setPlaces(fullPlaces)
           sessionStorage.setItem(fullCacheKey, JSON.stringify(fullPlaces))
         }
-      } catch (error) {
+      } catch {
         if (!controller.signal.aborted) {
           setPlaces([])
           setIsLoading(false)
@@ -311,52 +215,56 @@ function App() {
   }, [position, debouncedSearch])
 
   useEffect(() => {
-    const candidates = places.filter(
-      (place) =>
-        Boolean(place.wikipediaTag) &&
-        place.photo.includes('staticmap.openstreetmap.de') &&
-        !attemptedWikipediaPhotoIdsRef.current.has(place.id),
-    )
+    const candidates = places
+      .filter(
+        (place) =>
+          Boolean(place.wikipediaTag) &&
+          place.photo.includes('staticmap.openstreetmap.de') &&
+          !attemptedWikipediaPhotoIdsRef.current.has(place.id),
+      )
+      .slice(0, 18)
 
     if (candidates.length === 0) return
 
     candidates.forEach((place) => attemptedWikipediaPhotoIdsRef.current.add(place.id))
 
     let cancelled = false
-    const enrichWithWikipediaPhotos = async () => {
-      const photoUpdates = await Promise.all(
-        candidates.map(async (place) => {
-          if (!place.wikipediaTag) return null
+    const concurrency = 3
+    const queue = [...candidates]
+
+    const runWorkers = async () => {
+      const updates: Array<{ id: string; photo: string }> = []
+
+      const worker = async () => {
+        while (queue.length > 0 && !cancelled) {
+          const place = queue.shift()
+          if (!place?.wikipediaTag) continue
 
           try {
             const thumbnailUrl = await getWikipediaThumbnail(place.wikipediaTag)
-            if (!thumbnailUrl) return null
-            return { id: place.id, photo: thumbnailUrl }
+            if (thumbnailUrl) {
+              updates.push({ id: place.id, photo: thumbnailUrl })
+            }
           } catch {
-            return null
+            /* ignore */
           }
-        }),
-      )
+        }
+      }
 
-      if (cancelled) return
+      await Promise.all(Array.from({ length: concurrency }, () => worker()))
 
-      const updates = new Map(
-        photoUpdates
-          .filter((item): item is { id: string; photo: string } => Boolean(item))
-          .map((item) => [item.id, item.photo]),
-      )
+      if (cancelled || updates.length === 0) return
 
-      if (updates.size === 0) return
-
+      const updateMap = new Map(updates.map((item) => [item.id, item.photo]))
       setPlaces((currentPlaces) =>
         currentPlaces.map((place) => {
-          const nextPhoto = updates.get(place.id)
+          const nextPhoto = updateMap.get(place.id)
           return nextPhoto ? { ...place, photo: nextPhoto } : place
         }),
       )
     }
 
-    void enrichWithWikipediaPhotos()
+    void runWorkers()
     return () => {
       cancelled = true
     }
@@ -365,18 +273,39 @@ function App() {
   const filteredPlaces = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
 
-    return places
-      .filter((place) => place.distanceMeters >= 0 && place.distanceMeters <= MAX_RADIUS_METERS)
+    const filtered = places
       .filter((place) => (category === 'all' ? true : place.category === category))
-      .filter((place) => (normalizedQuery ? place.name.toLowerCase().includes(normalizedQuery) : true))
-      .sort((a, b) => a.distanceMeters - b.distanceMeters)
+      .filter((place) =>
+        normalizedQuery ? place.name.toLowerCase().includes(normalizedQuery) : true,
+      )
+
+    return filtered.sort((a, b) => {
+      if (normalizedQuery) {
+        const scoreA = getSearchRelevanceScore(normalizedQuery, a.name)
+        const scoreB = getSearchRelevanceScore(normalizedQuery, b.name)
+        if (scoreB !== scoreA) return scoreB - scoreA
+      }
+      return a.distanceMeters - b.distanceMeters
+    })
   }, [places, category, searchQuery])
+
+  const mapMarkers = useMemo(
+    () =>
+      filteredPlaces.map((place) => ({
+        id: place.id,
+        lat: place.lat,
+        lng: place.lng,
+        name: place.name,
+      })),
+    [filteredPlaces],
+  )
 
   const hasActiveSearch = searchQuery.trim().length > 0
   const focusedPlace = hasActiveSearch && filteredPlaces.length > 0 ? filteredPlaces[0] : null
-  const listPlaces = hasActiveSearch && focusedPlace
-    ? filteredPlaces.filter((place) => place.id !== focusedPlace.id)
-    : filteredPlaces
+  const listPlaces =
+    hasActiveSearch && focusedPlace
+      ? filteredPlaces.filter((place) => place.id !== focusedPlace.id)
+      : filteredPlaces
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-100 via-white to-indigo-100 px-4 py-5 text-slate-800">
@@ -390,9 +319,12 @@ function App() {
 
         <section className="rounded-2xl border border-white/30 bg-white/55 p-3 shadow-xl backdrop-blur-md">
           <label className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+              aria-hidden
+            />
             <input
-              type="text"
+              type="search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               onKeyDown={(event) => {
@@ -401,6 +333,8 @@ function App() {
                 }
               }}
               placeholder={t('searchPlaceholder')}
+              autoComplete="off"
+              aria-label={t('aria.searchLabel')}
               className="w-full rounded-xl border border-white/30 bg-white/70 py-2.5 pl-10 pr-3 text-sm text-slate-800 outline-none ring-slate-300 placeholder:text-slate-400 focus:ring-2"
             />
           </label>
@@ -408,7 +342,10 @@ function App() {
         </section>
 
         {position && (
-          <section className="overflow-hidden rounded-3xl border border-white/30 bg-white/55 shadow-xl backdrop-blur-md">
+          <section
+            className="overflow-hidden rounded-3xl border border-white/30 bg-white/55 shadow-xl backdrop-blur-md"
+            aria-label={t('aria.mapSection')}
+          >
             <p className="px-4 py-3 text-sm font-semibold text-slate-700">{t('nearbyMap')}</p>
             <MapContainer center={[position.lat, position.lng]} zoom={14} className="h-56 w-full">
               <TileLayer
@@ -419,17 +356,13 @@ function App() {
               <Marker position={[position.lat, position.lng]}>
                 <Popup>{t('yourPosition')}</Popup>
               </Marker>
-              {filteredPlaces.map((place) => (
-                <Marker key={place.id} position={[place.lat, place.lng]}>
-                  <Popup>{place.name}</Popup>
-                </Marker>
-              ))}
+              <ClusteredPlaceMarkers places={mapMarkers} />
             </MapContainer>
           </section>
         )}
 
         {focusedPlace && (
-          <section className="space-y-2">
+          <section className="space-y-2" aria-label={t('searchResultCard')}>
             <p className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
               {t('searchResultCard')}
             </p>
@@ -438,7 +371,7 @@ function App() {
         )}
 
         {isLoading && (
-          <section className="space-y-3">
+          <section className="space-y-3" aria-busy="true" aria-live="polite">
             {Array.from({ length: 4 }).map((_, idx) => (
               <div
                 key={idx}
@@ -467,7 +400,7 @@ function App() {
         )}
 
         {!isLoading && listPlaces.length > 0 && (
-          <section className="space-y-3 pb-4">
+          <section className="space-y-3 pb-4" aria-label={t('aria.resultsList')}>
             {listPlaces.map((place) => (
               <PlaceCard key={place.id} place={place} />
             ))}
