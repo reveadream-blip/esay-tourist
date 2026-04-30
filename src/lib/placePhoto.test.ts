@@ -5,7 +5,6 @@ import {
   extractWikipediaTag,
   getNoPhotoDataUrl,
   getPendingPhotoDataUrl,
-  hasResolvedPlacePhoto,
   isPhotoPlaceholder,
   sanitizePlaceNameForImageSearch,
 } from './placePhoto'
@@ -52,15 +51,6 @@ describe('categoryToCommonsKeyword', () => {
   it('maps known categories', () => {
     expect(categoryToCommonsKeyword('restos')).toContain('restaurant')
     expect(categoryToCommonsKeyword('hotels')).toContain('hotel')
-  })
-})
-
-describe('hasResolvedPlacePhoto', () => {
-  it('accepts remote images and rejects pending / nophoto', () => {
-    expect(hasResolvedPlacePhoto('https://upload.wikimedia.org/foo.jpg')).toBe(true)
-    expect(hasResolvedPlacePhoto(getPendingPhotoDataUrl())).toBe(false)
-    expect(hasResolvedPlacePhoto(getNoPhotoDataUrl())).toBe(false)
-    expect(hasResolvedPlacePhoto('https://tile.openstreetmap.org/16/1/2.png')).toBe(false)
   })
 })
 

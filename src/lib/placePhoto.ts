@@ -98,13 +98,6 @@ export function isPhotoPlaceholder(photo: string): boolean {
   )
 }
 
-/** Photo réelle affichable (plus de chargement, pas l’état « aucune photo »). */
-export function hasResolvedPlacePhoto(photo: string): boolean {
-  if (photo.includes('easytravel-nophoto')) return false
-  if (isPhotoPlaceholder(photo)) return false
-  return true
-}
-
 export function getPlacePhotoUrl(tags: Record<string, string>): string {
   const directImage = tags.image ?? tags['image:0']
   if (directImage && /^https?:\/\//i.test(directImage)) {
