@@ -78,10 +78,7 @@ export function isPhotoPlaceholder(photo: string): boolean {
   )
 }
 
-export function getPlacePhotoUrl(
-  tags: Record<string, string>,
-  category: Exclude<CategoryId, 'all'>,
-): string {
+export function getPlacePhotoUrl(tags: Record<string, string>, lat: number, lng: number): string {
   const directImage = tags.image ?? tags['image:0']
   if (directImage && /^https?:\/\//i.test(directImage)) {
     return directImage
@@ -92,7 +89,8 @@ export function getPlacePhotoUrl(
     return toWikimediaFileUrl(wikimediaCommons)
   }
 
-  return getCategorySvgDataUrl(category)
+  /* Pas de photo OSM : carte locale + enrichissement async (Wikidata / wiki / Commons / Unsplash). */
+  return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=16&size=1200x800&markers=${lat},${lng},red-pushpin`
 }
 
 export async function getWikipediaThumbnail(wikipediaTag: string): Promise<string | null> {

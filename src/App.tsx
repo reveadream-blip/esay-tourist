@@ -160,7 +160,7 @@ function App() {
             id,
             category: categoryId,
             name,
-            photo: getPlacePhotoUrl(tags, categoryId),
+            photo: getPlacePhotoUrl(tags, lat, lng),
             wikipediaTag: extractWikipediaTag(tags),
             wikidataId: extractWikidataId(tags),
             lat,
