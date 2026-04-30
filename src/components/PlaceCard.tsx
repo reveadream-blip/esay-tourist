@@ -32,6 +32,7 @@ function formatDistance(distanceMeters: number) {
 export function PlaceCard({ place }: Props) {
   const { t } = useTranslation()
   const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${place.lat},${place.lng}`
+  const itineraryUrl = `https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`
   const categoryEmoji: Record<string, string> = {
     hotels: '🏨',
     restos: '🍽',
@@ -78,15 +79,26 @@ export function PlaceCard({ place }: Props) {
           </div>
         </div>
 
-        <a
-          href={streetViewUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-        >
-          <Navigation className="h-4 w-4" aria-hidden />
-          {t('streetView')}
-        </a>
+        <div className="grid grid-cols-2 gap-2">
+          <a
+            href={itineraryUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            <Navigation className="h-4 w-4" aria-hidden />
+            {t('itinerary')}
+          </a>
+          <a
+            href={streetViewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-700 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-600"
+          >
+            <Navigation className="h-4 w-4" aria-hidden />
+            {t('streetView')}
+          </a>
+        </div>
       </div>
     </article>
   )
